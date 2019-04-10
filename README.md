@@ -53,4 +53,13 @@ This utility will unregister the table after the query is complete and the data 
 }
 ```
 
+#### Hive Metastore API
 
+* Table.getCols (List[SchemaFields]) `id`, `amount`
+* Partition.getValues `2019-04-10`,`US`
+* Partition.getParameters `totalSize` -> `1234`, `COLUMN_STATS_ACCURATE` -> `{\"BASIC_STATS\":\"true\"}`)
+* Partition.getSd StorageDescriptor
+* StorageDescriptor.getCols (List[SchemaFields]) `date`, `region`
+* StorageDescriptor.getSerdeInfo SerDeInfo
+* SerDeInfo.getName `org.apache.hadoop.hive.ql.io.orc.OrcSerde`, `org.apache.hadoop.hive.ql.io.orc.VectorizedOrcSerde
+`

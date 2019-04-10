@@ -1,30 +1,49 @@
 package com.google.example
 
-import org.apache.hadoop.hive.metastore.api.FieldSchema
-import com.google.cloud.bigquery.{BigQuery, Field, Schema, StandardSQLTypeName, TableInfo}
+import java.util.Collections
+
+import com.google.cloud.bigquery._
 import com.google.example.MetastoreQuery.TableMetadata
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition}
+
+import scala.collection.JavaConverters.asScalaBufferConverter
 
 object Mapping {
-  import scala.collection.JavaConverters.seqAsJavaListConverter
+  def createExternalTables(project: String,
+                           dataset: String,
+                           table: String,
+                           meta: TableMetadata,
+                           bigquery: BigQuery): Seq[TableInfo] = {
+    meta.partitions.map{part =>
+      createExternalTableForPartition(
+        project, dataset, table, part, bigquery)
+    }
+  }
 
-  def createExternalTable(project: String,
+  def createExternalTableForPartition(project: String,
                           dataset: String,
                           table: String,
-                          meta: TableMetadata,
+                          part: Partition,
                           bigquery: BigQuery): TableInfo = {
-    val sources: java.util.List[String] = meta.partitions.map(_.getSd.getLocation).asJava
-    val schema = convertSchema(meta)
-    ExternalTableManager.createExternalTable(project, dataset, table, schema, sources, bigquery)
+    val extTableName = table + "_" + part.getValues.asScala.mkString("_")
+
+    ExternalTableManager.createExternalTable(
+      project,
+      dataset,
+      extTableName,
+      convertFields(part.getSd.getCols),
+      Collections.singletonList(part.getSd.getLocation),
+      bigquery)
   }
 
-  def convertSchema(meta: TableMetadata): Schema = {
-    Schema.of(meta.fields.map(convert):_*)
+  def convertFields(fields: java.util.List[FieldSchema]): Schema = {
+    Schema.of(fields.asScala.map(convertField):_*)
   }
 
-  def convert(hive: FieldSchema): Field = {
-    Field.newBuilder(hive.getName, TypeMap(hive.getType))
+  def convertField(field: FieldSchema): Field = {
+    Field.newBuilder(field.getName, TypeMap(field.getType))
       .setMode(Field.Mode.NULLABLE)
-      .setDescription(hive.getComment)
+      .setDescription(field.getComment)
       .build()
   }
 

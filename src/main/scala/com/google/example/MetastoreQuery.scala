@@ -1,8 +1,8 @@
 package com.google.example
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.{HiveMetaStoreClient, IMetaStoreClient}
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition, Table}
+import org.apache.hadoop.hive.metastore.{HiveMetaStoreClient, IMetaStoreClient}
 
 import scala.collection.JavaConverters._
 

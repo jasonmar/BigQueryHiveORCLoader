@@ -57,7 +57,7 @@ object BQHiveLoader {
         val metastore = MetastoreQuery.connectToMetaStore(config.metastoreUri)
         val bigquery = BigQueryOptions.getDefaultInstance.getService
         val metadata = MetastoreQuery.getMetadata(config.hiveDbName, config.hiveTableName, metastore)
-        Mapping.createExternalTable(config.project, config.dataset, config.table, metadata, bigquery)
+        Mapping.createExternalTables(config.project, config.dataset, config.table, metadata, bigquery)
 
       case _ =>
         System.err.println("Invalid args")

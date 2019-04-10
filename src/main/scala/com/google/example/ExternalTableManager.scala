@@ -1,6 +1,6 @@
 package com.google.example
 
-import com.google.cloud.bigquery.{BigQuery, ExternalTableDefinition, FormatOptions, Schema, TableId, TableInfo}
+import com.google.cloud.bigquery._
 
 object ExternalTableManager {
   def defaultExpiration: Long = System.currentTimeMillis() + 1000*60*60*24*2 // 2 days
