@@ -5,6 +5,7 @@ import com.google.cloud.bigquery.QueryJobConfiguration.Priority
 import com.google.cloud.bigquery._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition}
+import org.apache.spark.sql.types.StructType
 
 object ExternalTableManager {
   def defaultExpiration: Long = System.currentTimeMillis() + 1000*60*60*24*2 // 2 days
@@ -81,17 +82,24 @@ object ExternalTableManager {
   }
 
   def genSql(extTable: TableId, table: CatalogTable, part: CatalogTablePartition): String = {
-    val partCols = table.partitionColumnNames.toSet
+    genSql2(extTable, table.partitionColumnNames, table.schema, part.spec.values.toSeq)
+  }
 
-    val renamedCols = table.schema
+  def genSql2(extTable: TableId,
+              partColNames: Seq[String],
+              schema: StructType,
+              partValues: Seq[String]) = {
+    val partCols = partColNames.toSet
+
+    val renamedCols = schema
       .filterNot(field => partCols.contains(field.name))
       .zipWithIndex
       .map{x =>
         s"_col${x._2+1} as ${x._1.name}"
       }
 
-    val partVals = table.partitionColumnNames
-      .zip(part.spec.values)
+    val partVals = partColNames
+      .zip(partValues)
       .map{x => s"${x._1} as '${x._2}'"}
 
     val tableSpec = extTable.getDataset + "." + extTable.getTable
