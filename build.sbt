@@ -18,19 +18,28 @@ version := "0.1.0"
 
 scalaVersion := "2.11.11"
 
+val hiveVersion = "1.2.1"
+val sparkVersion = "2.3.0"
+
 val exHadoop = ExclusionRule("org.apache.hadoop")
 val exGuava = ExclusionRule("com.google.guava")
 
 libraryDependencies ++= Seq(
-	"org.apache.hive" % "hive-metastore" % "1.2.2",
+  "com.google.guava" % "guava" % "27.1-jre"
+)
+
+libraryDependencies ++= Seq(
+	"org.apache.hive" % "hive-metastore" % hiveVersion,
+  "org.apache.spark" %% "spark-core" % sparkVersion,
+  "org.apache.spark" %% "spark-sql" % sparkVersion,
+  "org.apache.spark" %% "spark-hive" % sparkVersion,
   "org.apache.hadoop" % "hadoop-common" % "2.7.7",
-	"com.google.cloud" % "google-cloud-bigquery" % "1.69.0" excludeAll exGuava,
-	"com.google.apis" % "google-api-services-bigquery" % "v2-rev431-1.25.0" excludeAll exGuava,
+	"com.google.cloud" % "google-cloud-bigquery" % "1.69.0",
+	"com.google.apis" % "google-api-services-bigquery" % "v2-rev431-1.25.0",
 	"com.google.code.gson" % "gson" % "2.8.5",
   "com.google.protobuf" % "protobuf-java" % "3.6.1",
-  "com.google.guava" % "guava" % "27.1-jre",
   "com.github.scopt" %% "scopt" % "3.7.1"
-)
+).map(_ excludeAll exGuava)
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.4" % "test"
 
