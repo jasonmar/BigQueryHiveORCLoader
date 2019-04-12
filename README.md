@@ -61,5 +61,8 @@ This utility will unregister the table after the query is complete and the data 
 * Partition.getSd StorageDescriptor
 * StorageDescriptor.getCols (List[SchemaFields]) `date`, `region`
 * StorageDescriptor.getSerdeInfo SerDeInfo
-* SerDeInfo.getName `org.apache.hadoop.hive.ql.io.orc.OrcSerde`, `org.apache.hadoop.hive.ql.io.orc.VectorizedOrcSerde
-`
+* SerDeInfo.getName `org.apache.hadoop.hive.ql.io.orc.OrcSerde`, `org.apache.hadoop.hive.ql.io.orc.VectorizedOrcSerde`
+
+#### Hive Metastore URI
+
+`jdbc:mysql://localhost/hive`

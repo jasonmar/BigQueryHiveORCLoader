@@ -1,38 +1,31 @@
 package com.google.example
 
-import com.google.cloud.bigquery._
-import com.google.example.MetastoreQuery.TableMetadata
-import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition}
+import java.util.Collections
 
-import scala.collection.JavaConverters.{asScalaBufferConverter,seqAsJavaListConverter}
+import com.google.cloud.bigquery._
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition}
+import org.apache.spark.sql.types.DataTypes._
+import org.apache.spark.sql.types.{StructField, StructType}
 
 object Mapping {
-  def createExternalTables(project: String,
-                           dataset: String,
-                           table: String,
-                           meta: TableMetadata,
-                           bigquery: BigQuery): Seq[TableInfo] = {
-    meta.partitions
-      .groupBy(partitionKey)
-      .toArray
-      .sortBy(_._1._1)
-      .map{case (partKey, parts) =>
-        createExternalTableForPartition(
-          project, dataset, table,
-          partKey._1, partKey._2,
-          parts, bigquery)
-      }.toSeq
-  }
+  def createExternalTable(project: String,
+                          dataset: String,
+                          table: String,
+                          tableMetadata: CatalogTable,
+                          part: CatalogTablePartition,
+                          bigquery: BigQuery): TableInfo = {
+    val extTableName = bigQueryTableName(table + "_" + part.spec.values.mkString("_"))
+    val partCols = tableMetadata.partitionColumnNames.toSet
 
-  def partitionKey(part: Partition): (String,Schema) = {
-    val colNames = part.getSd.getCols.asScala.map(_.getName)
-    val colValues = part.getValues.asScala
-    val schema = convertFields(part.getSd.getCols)
-    val values = colNames.zip(colValues)
-      .sorted
-      .map{case (k,v) => s"$k=$v"}
-      .mkString(",")
-    (values, schema)
+    val partSchema = StructType(tableMetadata.schema.filterNot(x => partCols.contains(x.name)))
+
+    ExternalTableManager.createExternalTable(
+      project,
+      dataset,
+      extTableName,
+      schema = convertStructType(partSchema),
+      sources = Collections.singletonList(part.location.toString),
+      bigquery = bigquery)
   }
 
   def bigQueryTableName(s: String): String = {
@@ -44,54 +37,33 @@ object Mapping {
     )
   }
 
-  def createExternalTableForPartition(project: String,
-                          dataset: String,
-                          table: String,
-                          partValues: String,
-                          schema: Schema,
-                          parts: Seq[Partition],
-                          bigquery: BigQuery): TableInfo = {
-    val extTableName = bigQueryTableName(table + "_" + partValues)
-
-    ExternalTableManager.createExternalTable(
-      project,
-      dataset,
-      extTableName,
-      schema,
-      parts.map(_.getSd.getLocation).asJava,
-      bigquery)
+  def convertStructType(fields: StructType): Schema = {
+    Schema.of(fields.map(convertStructField):_*)
   }
 
-  def convertFields(fields: java.util.List[FieldSchema]): Schema = {
-    Schema.of(fields.asScala.map(convertField):_*)
-  }
-
-  def convertField(field: FieldSchema): Field = {
-    Field.newBuilder(field.getName, TypeMap(field.getType))
-      .setMode(Field.Mode.NULLABLE)
-      .setDescription(field.getComment)
+  def convertStructField(field: StructField): Field = {
+    Field.newBuilder(field.name, convertTypeName(field.dataType.typeName))
+      .setMode(if (field.nullable) Field.Mode.NULLABLE else Field.Mode.REQUIRED)
       .build()
   }
 
-  val TypeMap: Map[String,StandardSQLTypeName] = Map(
-    "TINYINT" -> StandardSQLTypeName.INT64,
-    "SMALLINT" -> StandardSQLTypeName.INT64,
-    "INT" -> StandardSQLTypeName.INT64,
-    "INTEGER" -> StandardSQLTypeName.INT64,
-    "BIGINT" -> StandardSQLTypeName.INT64,
-    "FLOAT" -> StandardSQLTypeName.FLOAT64,
-    "DOUBLE" -> StandardSQLTypeName.FLOAT64,
-    "DOUBLE PRECISION" -> StandardSQLTypeName.FLOAT64,
-    "DECIMAL" -> StandardSQLTypeName.NUMERIC,
-    "NUMERIC" -> StandardSQLTypeName.NUMERIC,
-    "BOOLEAN" -> StandardSQLTypeName.BOOL,
-    "BINARY" -> StandardSQLTypeName.BYTES,
-    "TIMESTAMP" -> StandardSQLTypeName.TIMESTAMP,
-    "DATE" -> StandardSQLTypeName.DATE,
-    "INTERVAL" -> StandardSQLTypeName.DATETIME,
-    "STRING" -> StandardSQLTypeName.STRING,
-    "VARCHAR" -> StandardSQLTypeName.STRING,
-    "CHAR" -> StandardSQLTypeName.STRING,
-    "STRUCT" -> StandardSQLTypeName.STRUCT
-  )
+  def convertTypeName(dataTypeName: String): StandardSQLTypeName = {
+    dataTypeName match {
+      case x if x.startsWith("array") => StandardSQLTypeName.ARRAY
+      case x if x == IntegerType.typeName => StandardSQLTypeName.INT64
+      case x if x == ShortType.typeName => StandardSQLTypeName.INT64
+      case x if x == LongType.typeName => StandardSQLTypeName.INT64
+      case x if x == FloatType.typeName => StandardSQLTypeName.FLOAT64
+      case x if x == DoubleType.typeName => StandardSQLTypeName.FLOAT64
+      case x if x.startsWith("decimal") => StandardSQLTypeName.NUMERIC
+      case x if x == BooleanType.typeName => StandardSQLTypeName.BOOL
+      case x if x == ByteType.typeName => StandardSQLTypeName.BYTES
+      case x if x == TimestampType.typeName => StandardSQLTypeName.TIMESTAMP
+      case x if x == DateType.typeName => StandardSQLTypeName.DATE
+      case x if x == StringType.typeName => StandardSQLTypeName.STRING
+      case x if x.startsWith("struct") => StandardSQLTypeName.STRUCT
+      case _ =>
+        throw new RuntimeException(s"Unexpected DataType '$dataTypeName'")
+    }
+  }
 }

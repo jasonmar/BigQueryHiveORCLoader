@@ -1,7 +1,7 @@
 package com.google.example
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
@@ -160,6 +160,5 @@ class ORCSpec extends FlatSpec with BeforeAndAfterAll {
         in.show(3)
       }
     }
-
   }
 }
