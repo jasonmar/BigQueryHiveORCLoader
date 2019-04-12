@@ -99,6 +99,6 @@ object BQHiveLoader {
 
     val targetParts = ExternalTableManager.findParts(config.hiveDbName, config.hiveTableName, config.partCol, config.targetPart, spark)
 
-    ExternalTableManager.registerParts(config.project, config.dataset, config.table, table, targetParts, bigquery)
+    ExternalTableManager.loadParts(config.project, config.dataset, config.table, table, targetParts, bigquery)
   }
 }

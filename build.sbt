@@ -24,14 +24,14 @@ val exHadoop = ExclusionRule("org.apache.hadoop")
 val exGuava = ExclusionRule("com.google.guava")
 
 libraryDependencies ++= Seq(
-  "com.google.guava" % "guava" % "27.1-jre"
+  "com.google.guava" % "guava" % "27.1-jre",
+  "com.google.cloud" % "google-cloud-bigquery" % "1.69.0"
 )
 
 libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % sparkVersion % Provided,
   "org.apache.spark" %% "spark-sql" % sparkVersion % Provided,
   "org.apache.spark" %% "spark-hive" % sparkVersion % Provided,
-	"com.google.cloud" % "google-cloud-bigquery" % "1.69.0",
   "com.github.scopt" %% "scopt" % "3.7.1"
 ).map(_ excludeAll exGuava)
 
