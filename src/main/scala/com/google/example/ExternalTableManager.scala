@@ -65,10 +65,19 @@ object ExternalTableManager {
     val jobId = JobId.newBuilder()
       .setProject(project)
       .setLocation("US")
-      .setJob(s"load_${tableId}_${part.spec.values.mkString("_")}")
+      .setJob(validJobId(s"load_${tableId}_${part.spec.values.mkString("_")}"))
       .build()
 
     bigquery.query(query, jobId)
+  }
+
+  def validJobId(s: String): String = {
+    s.filter(c =>
+      (c >= '0' && c <= '9') ||
+      (c >= 'A' && c <= 'Z') ||
+      (c >= 'a' && c <= 'z') ||
+      c == '_' || c == '-'
+    ).take(1024)
   }
 
   def genSql(extTable: TableId, table: CatalogTable, part: CatalogTablePartition): String = {
@@ -94,14 +103,11 @@ object ExternalTableManager {
 
   def findParts(db: String, table: String, partCol: String, target: String, spark: SparkSession): Seq[CatalogTablePartition] = {
     val cat = spark.sessionState.catalog.externalCatalog
-
+    val colNames = cat.getTable(db, table).partitionColumnNames
     cat.listPartitions(db, table)
-      .filter{x =>
-        cat.getTable(db, table)
-          .partitionColumnNames
-          .zip(x.spec.values)
-          .filter(_._1 == partCol)
-          .exists(_._2 == target)
+      .filter{partition =>
+        colNames.zip(partition.spec.values)
+          .exists(y => y._1 == partCol & y._2 == target)
       }
   }
 }

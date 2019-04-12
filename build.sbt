@@ -18,7 +18,6 @@ version := "0.1.0"
 
 scalaVersion := "2.11.11"
 
-val hiveVersion = "1.2.1"
 val sparkVersion = "2.3.0"
 
 val exHadoop = ExclusionRule("org.apache.hadoop")
@@ -29,15 +28,10 @@ libraryDependencies ++= Seq(
 )
 
 libraryDependencies ++= Seq(
-	"org.apache.hive" % "hive-metastore" % hiveVersion,
-  "org.apache.spark" %% "spark-core" % sparkVersion,
-  "org.apache.spark" %% "spark-sql" % sparkVersion,
-  "org.apache.spark" %% "spark-hive" % sparkVersion,
-  "org.apache.hadoop" % "hadoop-common" % "2.7.7",
+  "org.apache.spark" %% "spark-core" % sparkVersion % Provided,
+  "org.apache.spark" %% "spark-sql" % sparkVersion % Provided,
+  "org.apache.spark" %% "spark-hive" % sparkVersion % Provided,
 	"com.google.cloud" % "google-cloud-bigquery" % "1.69.0",
-	"com.google.apis" % "google-api-services-bigquery" % "v2-rev431-1.25.0",
-	"com.google.code.gson" % "gson" % "2.8.5",
-  "com.google.protobuf" % "protobuf-java" % "3.6.1",
   "com.github.scopt" %% "scopt" % "3.7.1"
 ).map(_ excludeAll exGuava)
 
@@ -54,3 +48,5 @@ assemblyShadeRules in assembly := Seq(
   ShadeRule.rename("com.google.common.**" -> "s.guava.@1").inAll,
   ShadeRule.rename("com.google.protobuf.*" -> "s.proto.@1").inAll
 )
+
+assemblyOption in assembly ~= { _.copy(includeScala = false) }

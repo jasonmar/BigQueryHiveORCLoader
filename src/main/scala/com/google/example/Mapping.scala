@@ -14,7 +14,7 @@ object Mapping {
                           tableMetadata: CatalogTable,
                           part: CatalogTablePartition,
                           bigquery: BigQuery): TableInfo = {
-    val extTableName = bigQueryTableName(table + "_" + part.spec.values.mkString("_"))
+    val extTableName = validBigQueryTableName(table + "_" + part.spec.values.mkString("_"))
     val partCols = tableMetadata.partitionColumnNames.toSet
 
     val partSchema = StructType(tableMetadata.schema.filterNot(x => partCols.contains(x.name)))
@@ -28,13 +28,14 @@ object Mapping {
       bigquery = bigquery)
   }
 
-  def bigQueryTableName(s: String): String = {
-    s.replace('=','_').filter(c =>
-      (c >= '0' && c <= '9') ||
-      (c >= 'A' && c <= 'Z') ||
-      (c >= 'a' && c <= 'z') ||
-      c == '_'
-    )
+  def validBigQueryTableName(s: String): String = {
+    s.replace('=','_')
+      .filter(c =>
+        (c >= '0' && c <= '9') ||
+        (c >= 'A' && c <= 'Z') ||
+        (c >= 'a' && c <= 'z') ||
+        c == '_'
+      ).take(1024)
   }
 
   def convertStructType(fields: StructType): Schema = {

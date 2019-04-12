@@ -24,8 +24,7 @@ class ORCSpec extends FlatSpec with BeforeAndAfterAll {
       .enableHiveSupport
       .getOrCreate()
 
-    spark.sql("DROP DATABASE IF EXISTS testdb CASCADE").show()
-    //spark.sql("DROP TABLE IF EXISTS testdb.test").show()
+    spark.sql("DROP DATABASE IF EXISTS testdb CASCADE")
     sparkSession = Option(spark)
   }
 
@@ -34,13 +33,13 @@ class ORCSpec extends FlatSpec with BeforeAndAfterAll {
     import spark.implicits._
 
     val rand = new Random()
-    spark.sql("create database if not exists testdb").show()
-    spark.sql("use testdb").show()
+    spark.sql("create database if not exists testdb")
+    spark.sql("use testdb")
     spark.sql(
       s"""CREATE EXTERNAL TABLE testdb.test (id STRING, x BIGINT, y INT, z DOUBLE)
         |PARTITIONED BY (region STRING, date STRING)
         |STORED AS ORC
-        |LOCATION 'file://$testDir/warehouse/test/'""".stripMargin).show()
+        |LOCATION 'file://$testDir/warehouse/test/'""".stripMargin)
 
     for (x <- 11 to 12) {
       for (region <- Seq("US", "EU")) {
@@ -48,24 +47,20 @@ class ORCSpec extends FlatSpec with BeforeAndAfterAll {
         val data = (0 until 10000).map{_ =>
           val id: String = (0 until 8).map(_ => rand.nextPrintableChar()).mkString
           (
-            id, // id
-            rand.nextLong(),    // x
-            rand.nextInt(),     // y
-            rand.nextDouble()   // z
+            id,               // id
+            rand.nextLong(),  // x
+            rand.nextInt(),   // y
+            rand.nextDouble() // z
           )
         }
 
         val df = data.toDF()
-
-        System.out.println("columns: " + df.columns.mkString(","))
 
         val colnames = Seq("id", "x", "y", "z")
 
         val dfWithColumnsRenamed = colnames.zipWithIndex.foldLeft(df){(a,b) =>
           a.withColumnRenamed(s"_${b._2+1}", b._1)
         }
-
-        System.out.println("columns: " + dfWithColumnsRenamed.columns.mkString(","))
 
         dfWithColumnsRenamed
           .write
@@ -80,7 +75,7 @@ class ORCSpec extends FlatSpec with BeforeAndAfterAll {
              |  region = '$region',
              |  date = '$date'
              |)
-             |LOCATION 'file://$testDir/${region}_${date}_part_$x.snappy.orc'""".stripMargin).show()
+             |LOCATION 'file://$testDir/${region}_${date}_part_$x.snappy.orc'""".stripMargin)
       }
     }
 
@@ -132,15 +127,16 @@ class ORCSpec extends FlatSpec with BeforeAndAfterAll {
     val spark = getSpark
     spark.sql(
       """select
+        |  date,
+        |  region
         |  id,
         |  x,
         |  y,
-        |  z,
-        |  date,
-        |  region
+        |  z
         |from testdb.test
         |where date == '2019-04-11'
-        |  and region = 'US'""".stripMargin).show(3)
+        |  and region = 'US'""".stripMargin)
+      .show(3)
   }
 
   it should "read orc" in {
@@ -148,7 +144,7 @@ class ORCSpec extends FlatSpec with BeforeAndAfterAll {
     for (region <- Seq("US")) {
       for (x <- Seq(11)) {
         val date = s"2019-04-$x"
-        val in = spark.read
+        spark.read
           .schema(StructType(Array(
             StructField("id", StringType),
             StructField("x", LongType),
@@ -156,8 +152,7 @@ class ORCSpec extends FlatSpec with BeforeAndAfterAll {
             StructField("z", DoubleType)
           )))
           .orc(s"file://$testDir/${region}_${date}_part_$x.snappy.orc")
-        System.out.println(in.columns.mkString(","))
-        in.show(3)
+          .show(3)
       }
     }
   }

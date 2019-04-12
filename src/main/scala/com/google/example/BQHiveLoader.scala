@@ -24,12 +24,12 @@ object BQHiveLoader {
       opt[String]('h', "hiveDbName")
         .required()
         .action{(x, c) => c.copy(hiveDbName = x)}
-        .text("hiveDbName is a string property")
+        .text("source Hive database name")
 
       opt[String]('s', "hiveTableName")
         .required()
         .action{(x, c) => c.copy(hiveTableName = x)}
-        .text("hiveTableName is a string property")
+        .text("source Hive table name")
 
       opt[String]('c', "dateColumn")
         .required()
@@ -44,21 +44,25 @@ object BQHiveLoader {
       opt[String]('p', "project")
         .required()
         .action{(x, c) => c.copy(project = x)}
-        .text("project is a string property")
+        .text("destination BigQuery project")
 
       opt[String]('b',"dataset")
         .required()
         .action{(x, c) => c.copy(dataset = x)}
-        .text("dataset is a string property")
+        .text("destination BigQuery dataset")
 
       opt[String]('d',"table")
         .required()
         .action{(x, c) => c.copy(table = x)}
-        .text("table is a string property")
+        .text("destination BigQuery table")
 
       opt[String]('m',"metastoreUri")
         .action{(x, c) => c.copy(metastoreUri = x)}
-        .text("metastoreUri is a string property")
+        .text("Hive MetaStore thrift URI")
+
+      opt[String]('j',"metastoreDb")
+        .action{(x, c) => c.copy(metastoreDb = x)}
+        .text("Hive MetaStore DB connection string")
 
       note("Loads Hive external ORC tables into BigQuery")
 
@@ -92,7 +96,9 @@ object BQHiveLoader {
 
   def run(config: Config, spark: SparkSession, bigquery: BigQuery): Unit = {
     val table = spark.sessionState.catalog.externalCatalog.getTable(config.hiveDbName, config.hiveTableName)
+
     val targetParts = ExternalTableManager.findParts(config.hiveDbName, config.hiveTableName, config.partCol, config.targetPart, spark)
+
     ExternalTableManager.registerParts(config.project, config.dataset, config.table, table, targetParts, bigquery)
   }
 }
