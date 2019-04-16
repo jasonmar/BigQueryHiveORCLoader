@@ -1,11 +1,25 @@
+/*
+ * Copyright 2019 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.google.example
 
 import com.google.cloud.bigquery.{BigQuery, BigQueryOptions, StandardTableDefinition, TableId, TableInfo}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
-import scala.util.Random
-import sys.env
 
 class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
   private var client: Option[BigQuery] = None
@@ -26,9 +40,9 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
     StructField("z", DoubleType)
   ))
 
-  val TestProject = "myproject"
-  val TestBucket = "mybucket"
-  val TestTable = s"test_${Random.nextInt(9999)}"
+  val TestProject = "retail-poc-demo"
+  val TestBucket = "bq_hive_load_demo"
+  val TestTable = s"test_1541"
 
   val PartColNames = Seq("date", "region")
   val PartValues = Seq("2019-04-11", "US")
@@ -37,21 +51,30 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
   val ExtTableId = TableId.of(TestProject,LoadDataset,TestTable+"_ext")
   val TargetTableId = TableId.of(TestProject,TargetDataset,TestTable)
 
-  override def beforeAll(): Unit = {
-    client = Option(BigQueryOptions
+  def newClient(): BigQuery = {
+    BigQueryOptions
       .getDefaultInstance
       .toBuilder
       .setProjectId(TestProject)
       .build()
-      .getService)
+      .getService
   }
 
+  override def beforeAll(): Unit = {
+    client = Option(newClient())
+  }
 
-  def getBigQuery: BigQuery = client.get
+  def getBigQuery: BigQuery = {
+    if (client.isDefined) client.get
+    else {
+      client = Option(newClient())
+      client.get
+    }
+  }
 
   "ExternalTableManager" should "Generate SQL" in {
     val extTable = TableId.of("project", "dataset", "table")
-    val generatedSql = ExternalTableManager.genSql2(extTable, PartColNames, TestSchema, PartValues)
+    val generatedSql = ExternalTableManager.generateSelectFromEternalTable(extTable, PartColNames, TestSchema, PartValues)
     val expectedSql =
       """select
         |  '2019-04-11' as date,
@@ -79,13 +102,8 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
 
   it should "select into new table" in {
     val bq = getBigQuery
-    if (!bq.getTable(TargetTableId).exists()){
-      val tbl = bq.create(TableInfo.of(TargetTableId, StandardTableDefinition.of(Mapping.convertStructType(TestSchema))))
-      System.out.println(tbl.getTableId)
-    }
-    while (!bq.getTable(TargetTableId).exists()){
-      Thread.sleep(2000)
-    }
+    val tbl = bq.create(TableInfo.of(TargetTableId, StandardTableDefinition.of(Mapping.convertStructType(TestSchema))))
+    Thread.sleep(5000)
     ExternalTableManager.loadPart(
       TargetTableId,
       TestSchema,

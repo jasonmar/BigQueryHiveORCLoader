@@ -1,21 +1,45 @@
+/*
+ * Copyright 2019 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.google.example
 
+import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.bigquery.{BigQuery, BigQueryOptions}
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 
 object BQHiveLoader {
-  val LocalMetastoreUri = "thrift://localhost:9083"
-  val LocalMetastoreConnection = "jdbc:mysql://localhost:3306/metastore?createDatabaseIfNotExist=true"
+  val BigQueryScope = "https://www.googleapis.com/auth/bigquery"
+  val StorageScope = "https://www.googleapis.com/auth/devstorage.read_write"
 
-  case class Config(metastoreUri: String = LocalMetastoreUri,
-                    metastoreDb: String = LocalMetastoreConnection,
+  case class Config(metastoreUri: Option[String] = None,
+                    metastoreDb: Option[String] = None,
                     hiveDbName: String = "",
                     hiveTableName: String = "",
                     partCol: String = "",
                     targetPart: String = "",
                     project: String = "",
                     dataset: String = "",
-                    table: String = "")
+                    table: String = "",
+                    bigQueryLocation: String = "US",
+                    krbKeyTab: Option[String] = None,
+                    krbPrincipal: Option[String] = None,
+                    krbServiceName: Option[String] = Option("bqhiveorcloader"),
+                    partFilters: Map[String,String] = Map.empty,
+                    kerberosEnabled: Boolean = false)
 
   val Parser: scopt.OptionParser[Config] =
     new scopt.OptionParser[Config]("BQHiveLoader") {
@@ -57,12 +81,36 @@ object BQHiveLoader {
         .text("destination BigQuery table")
 
       opt[String]('m',"metastoreUri")
-        .action{(x, c) => c.copy(metastoreUri = x)}
-        .text("Hive MetaStore thrift URI")
+        .action{(x, c) => c.copy(metastoreUri = Option(x))}
+        .text("Hive MetaStore thrift URI (thrift://localhost:9083)")
 
       opt[String]('j',"metastoreDb")
-        .action{(x, c) => c.copy(metastoreDb = x)}
-        .text("Hive MetaStore DB connection string")
+        .action{(x, c) => c.copy(metastoreDb = Option(x))}
+        .text("Hive MetaStore DB connection string (jdbc:mysql://localhost:3306/metastore?createDatabaseIfNotExist=true)")
+
+      opt[Map[String,String]]("partFilters")
+        .action{(x, c) => c.copy(partFilters = x)}
+        .text("partition filters specified as k1=v1,k2=v2,...")
+
+      opt[String]("bigQueryLocation")
+        .action{(x, c) => c.copy(bigQueryLocation = x)}
+        .text("BigQuery Location (default: US)")
+
+      opt[String]("keyTab")
+        .action{(x, c) => c.copy(krbKeyTab = Option(x))}
+        .text("Kerberos keytab location (path/to/krb5.keytab)")
+
+      opt[String]("principal")
+        .action{(x, c) => c.copy(krbPrincipal = Option(x))}
+        .text("Kerberos user principal (user/host.example.com@EXAMPLE.COM)")
+
+      opt[String]("serviceName")
+        .action{(x, c) => c.copy(krbServiceName = Option(x))}
+        .text("Kerberos service name")
+
+      opt[Boolean]("kerberos")
+        .action{(x,c) => c.copy(kerberosEnabled = x)}
+        .text("flag to enable kerberos")
 
       note("Loads Hive external ORC tables into BigQuery")
 
@@ -73,16 +121,33 @@ object BQHiveLoader {
   def main(args: Array[String]): Unit = {
     Parser.parse(args, Config()) match {
       case Some(config) =>
+        if (config.kerberosEnabled) {
+          for {
+            keytab <- config.krbKeyTab
+            principal <- config.krbPrincipal
+            serviceName <- config.krbServiceName
+          } yield {
+            Kerberos.configureJaas("BQHiveLoader", keytab, principal, serviceName)
+          }
+        }
+
+        val sparkSettings: Seq[(String,String)] =
+          Seq[Option[(String,String)]](
+            config.metastoreUri.map{x => ("hive.metastore.uris", x)},
+            config.metastoreDb.map{x => ("javax.jdo.option.ConnectionURL", x)},
+          ).flatten
+
         val spark = SparkSession
           .builder()
           .master("local")
           .appName("Test Hive Support")
-          .config("javax.jdo.option.ConnectionURL", "jdbc:mysql://localhost:3306/metastore?createDatabaseIfNotExist=true")
+          .config(new SparkConf().setAll(sparkSettings))
           .enableHiveSupport
           .getOrCreate()
 
         val bigquery = BigQueryOptions.getDefaultInstance.toBuilder
-          .setLocation("US")
+          .setLocation(config.bigQueryLocation)
+          .setCredentials(GoogleCredentials.getApplicationDefault.createScoped(BigQueryScope, StorageScope))
           .build()
           .getService
 
@@ -95,9 +160,10 @@ object BQHiveLoader {
   }
 
   def run(config: Config, spark: SparkSession, bigquery: BigQuery): Unit = {
-    val table = spark.sessionState.catalog.externalCatalog.getTable(config.hiveDbName, config.hiveTableName)
+    val table = spark.sessionState.catalog.externalCatalog
+      .getTable(config.hiveDbName, config.hiveTableName)
 
-    val targetParts = ExternalTableManager.findParts(config.hiveDbName, config.hiveTableName, config.partCol, config.targetPart, spark)
+    val targetParts = ExternalTableManager.findParts(config.hiveDbName, config.hiveTableName, config.partCol, config.targetPart, config.partFilters, spark)
 
     ExternalTableManager.loadParts(config.project, config.dataset, config.table, table, targetParts, bigquery)
   }

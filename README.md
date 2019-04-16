@@ -26,7 +26,7 @@ It queries Hive to retrieve partition information and generates SQL to set parti
 ### Temporary or Permanent?
 
 Querying of BigQuery Federated Formats requires a Permanent External Table.
-This utility will unregister the table after the query is complete and the data is copied to a BigQuery native table.
+However, the this utility creates tables with a default expiration of 2 days so that they will be automatically removed.
 
 
 
@@ -53,16 +53,7 @@ This utility will unregister the table after the query is complete and the data 
 }
 ```
 
-#### Hive Metastore API
+## Disclaimer
 
-* Table.getCols (List[SchemaFields]) `id`, `amount`
-* Partition.getValues `2019-04-10`,`US`
-* Partition.getParameters `totalSize` -> `1234`, `COLUMN_STATS_ACCURATE` -> `{\"BASIC_STATS\":\"true\"}`)
-* Partition.getSd StorageDescriptor
-* StorageDescriptor.getCols (List[SchemaFields]) `date`, `region`
-* StorageDescriptor.getSerdeInfo SerDeInfo
-* SerDeInfo.getName `org.apache.hadoop.hive.ql.io.orc.OrcSerde`, `org.apache.hadoop.hive.ql.io.orc.VectorizedOrcSerde`
+This is not an official Google project.
 
-#### Hive Metastore URI
-
-`jdbc:mysql://localhost/hive`
