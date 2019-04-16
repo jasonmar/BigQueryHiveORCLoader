@@ -131,17 +131,15 @@ object BQHiveLoader {
           }
         }
 
-        val sparkSettings: Seq[(String,String)] =
-          Seq[Option[(String,String)]](
-            config.metastoreUri.map{x => ("hive.metastore.uris", x)},
-            config.metastoreDb.map{x => ("javax.jdo.option.ConnectionURL", x)},
-          ).flatten
+        val sparkConf = new SparkConf()
+        config.metastoreUri.foreach{x => sparkConf.set("hive.metastore.uris", x)}
+        config.metastoreDb.foreach{x => sparkConf.set("javax.jdo.option.ConnectionURL", x)}
 
         val spark = SparkSession
           .builder()
           .master("local")
-          .appName("Test Hive Support")
-          .config(new SparkConf().setAll(sparkSettings))
+          .appName("BQHiveORCLoader")
+          .config(sparkConf)
           .enableHiveSupport
           .getOrCreate()
 
