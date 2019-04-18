@@ -22,7 +22,7 @@ import com.google.cloud.bigquery._
 import com.google.example.Mapping.convertStructType
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.CatalogTablePartition
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 
 object ExternalTableManager {
   def defaultExpiration: Long = System.currentTimeMillis() + 1000*60*60*24*2 // 2 days
@@ -149,6 +149,8 @@ object ExternalTableManager {
     ).take(1024)
   }
 
+  // TODO convert week number to date
+  // TODO add format option
   def generateSelectFromEternalTable(extTable: TableId,
                                      partColNames: Seq[String],
                                      schema: StructType,
@@ -161,11 +163,18 @@ object ExternalTableManager {
 
     val partVals = partColNames
       .zip(partValues)
-      .map{x => s"'${x._2}' as ${x._1}"}
+      .map{x =>
+        schema.find(_.name == x._1) match {
+          case Some(field) if field.dataType.typeName == IntegerType.typeName || field.dataType.typeName == LongType.typeName =>
+            s"${x._2} as ${x._1}"
+          case _ =>
+            s"'${x._2}' as ${x._1}"
+        }
+      }
 
     val data = if (renameOrcCols) {
       // handle positional column naming
-      fields.zipWithIndex.map{x => s"_col${x._2+1} as ${x._1.name}"}
+      fields.zipWithIndex.map{x => s"_col${x._2} as ${x._1.name}"}
     } else {
       fields.map{x => s"${x.name}"}
     }
