@@ -21,7 +21,7 @@ import com.google.cloud.bigquery.QueryJobConfiguration.Priority
 import com.google.cloud.bigquery._
 import com.google.example.Mapping.convertStructType
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition}
+import org.apache.spark.sql.catalyst.catalog.CatalogTablePartition
 import org.apache.spark.sql.types.StructType
 
 object ExternalTableManager {
@@ -48,13 +48,16 @@ object ExternalTableManager {
     tableInfo
   }
 
+  case class TableMetadata(schema: StructType, partitionColumnNames: Seq[String])
+  case class Partition(values: Seq[String], location: String)
+
   def createExternalTable(project: String,
                           dataset: String,
                           table: String,
-                          tableMetadata: CatalogTable,
-                          part: CatalogTablePartition,
+                          tableMetadata: TableMetadata,
+                          part: Partition,
                           bigquery: BigQuery): TableInfo = {
-    val extTableName = validBigQueryTableName(table + "_" + part.spec.values.mkString("_"))
+    val extTableName = validBigQueryTableName(table + "_" + part.values.mkString("_"))
     val partCols = tableMetadata.partitionColumnNames.toSet
 
     val partSchema = StructType(tableMetadata.schema.filterNot(x => partCols.contains(x.name)))
@@ -68,8 +71,8 @@ object ExternalTableManager {
   def loadParts(project: String,
                 dataset: String,
                 tableName: String,
-                catalogTable: CatalogTable,
-                parts: Seq[CatalogTablePartition],
+                catalogTable: TableMetadata,
+                parts: Seq[Partition],
                 bigquery: BigQuery): Seq[TableResult] = {
     parts.map { part =>
       val extTable = createExternalTable(
@@ -81,7 +84,7 @@ object ExternalTableManager {
       loadPart(TableId.of(project, dataset, tableName),
         catalogTable.schema,
         catalogTable.partitionColumnNames,
-        part.spec.values.toSeq,
+        part.values,
         extTable.getTableId,
         bigquery,
         renameOrcCols = renameOrcCols)
@@ -150,7 +153,7 @@ object ExternalTableManager {
                                      partColNames: Seq[String],
                                      schema: StructType,
                                      partValues: Seq[String],
-                                     renameOrcCols: Boolean = false) = {
+                                     renameOrcCols: Boolean = false): String = {
     val partCols = partColNames.toSet
 
     val fields = schema
@@ -173,22 +176,114 @@ object ExternalTableManager {
        |from `$tableSpec`""".stripMargin
   }
 
-  def findParts(db: String, table: String, partCol: String, target: String, partFilters: Map[String,String], spark: SparkSession): Seq[CatalogTablePartition] = {
+  def findParts(db: String, table: String, partFilters: String, spark: SparkSession): Seq[CatalogTablePartition] = {
     val cat = spark.sessionState.catalog.externalCatalog
     val colNames = cat.getTable(db, table).partitionColumnNames
     cat.listPartitions(db, table)
       .filter{partition =>
         val partMap = colNames.zip(partition.spec.values).toMap
-        filterPartition(partMap, partFilters) &&
-        partMap
-          .exists(y => y._1 == partCol & y._2 == target)
+        filterPartition(partMap, partFilters)
       }
   }
 
-  def filterPartition(partValues: Map[String,String], partFilters: Map[String,String]): Boolean = {
-    for ((k,v) <- partFilters) {
-      if (!partValues.get(k).contains(v)) return false
+  def filterPartition(partValues: Map[String,String], whereClause: String): Boolean = {
+    for (x <- partValues) {
+      parseFilters(whereClause).get(x._1) match {
+        case Some(filters) if filters.exists{!_(x)} =>
+          return false
+        case _ =>
+      }
     }
     true
+  }
+
+  sealed trait PartFilter {
+    def apply(part: (String, String)): Boolean
+  }
+
+  case class Equals(l: String, r: String) extends PartFilter {
+    override def apply(part: (String, String)): Boolean = {
+      l == part._1 && (r == "*" || r == part._2)
+    }
+  }
+
+  case class GreaterThan(l: String, r: String) extends PartFilter {
+    override def apply(part: (String, String)): Boolean = {
+      l == part._1 && r > part._2
+    }
+  }
+
+  case class LessThan(l: String, r: String) extends PartFilter {
+    override def apply(part: (String, String)): Boolean = {
+      l == part._1 && r < part._2
+    }
+  }
+
+  case class GreaterThanOrEq(l: String, r: String) extends PartFilter {
+    override def apply(part: (String, String)): Boolean = {
+      l == part._1 && r >= part._2
+    }
+  }
+
+  case class LessThanOrEq(l: String, r: String) extends PartFilter {
+    override def apply(part: (String, String)): Boolean = {
+      l == part._1 && r <= part._2
+    }
+  }
+
+  case class In(l: String, r: Set[String]) extends PartFilter {
+    override def apply(part: (String, String)): Boolean = {
+      l == part._1 && r.contains(part._2)
+    }
+  }
+
+  def parseFilters(partFilters: String): Map[String,Seq[PartFilter]] = {
+    if (partFilters.nonEmpty){
+      partFilters.replaceAllLiterally(" and ", " AND ")
+        .replaceAllLiterally(" And ", " AND ")
+        .replaceAllLiterally(" in ", " IN ")
+        .replaceAllLiterally(" In ", " IN ")
+        .split(" AND ")
+        .flatMap(parseFilter)
+        .groupBy(_._1)
+        .mapValues{_.map{_._2}.toSeq}
+    } else Map.empty
+  }
+
+  def parseFilter(expr: String): Option[(String,PartFilter)] = {
+    if (expr.contains('=')) {
+      expr.split('=').map(_.trim) match {
+        case Array(l,r) => Option((l, Equals(l, r)))
+        case _ => None
+      }
+    } else if (expr.contains("<=")) {
+      expr.split("<=").map(_.trim) match {
+        case Array(l,r) => Option((l, LessThanOrEq(l, r)))
+        case _ => None
+      }
+    } else if (expr.contains(">=")) {
+      expr.split(">=").map(_.trim) match {
+        case Array(l,r) => Option((l, GreaterThanOrEq(l, r)))
+        case _ => None
+      }
+    } else if (expr.contains('<')) {
+      expr.split('<').map(_.trim) match {
+        case Array(l,r) => Option((l, LessThan(l, r)))
+        case _ => None
+      }
+    } else if (expr.contains('>')) {
+      expr.split('>').map(_.trim) match {
+        case Array(l,r) => Option((l, GreaterThan(l, r)))
+        case _ => None
+      }
+    } else if (expr.contains(" IN ")) {
+      expr.split(" IN ").map(_.trim) match {
+        case Array(l,r) =>
+          val set = r.stripPrefix("(").stripSuffix(")")
+            .split(',').map(_.trim).toSet
+          Option((l, In(l, set)))
+        case _ => None
+      }
+    } else None
   }
 }
