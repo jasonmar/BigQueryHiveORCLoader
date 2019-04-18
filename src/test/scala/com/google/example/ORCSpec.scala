@@ -16,6 +16,7 @@
 
 package com.google.example
 
+import com.google.example.MetaStore.SparkSQL
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SaveMode, SparkSession}
@@ -27,6 +28,8 @@ class ORCSpec extends FlatSpec with BeforeAndAfterAll {
   private var sparkSession: Option[SparkSession] = None
   def getSpark: SparkSession = sparkSession.get
   val testDir = "/tmp/test"
+  val DBName = "testdb"
+  val TableName = "test"
 
   override def beforeAll(): Unit = {
     val spark = SparkSession.builder()
@@ -171,5 +174,10 @@ class ORCSpec extends FlatSpec with BeforeAndAfterAll {
           .show(3)
       }
     }
+  }
+
+  it should "query partitions" in {
+    val metaStore = SparkSQL(getSpark)
+    metaStore.findParts(DBName, TableName, "")
   }
 }

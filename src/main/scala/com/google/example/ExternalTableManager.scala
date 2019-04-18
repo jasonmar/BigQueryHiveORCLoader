@@ -20,6 +20,7 @@ import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
 import com.google.cloud.bigquery._
 import com.google.example.Mapping.convertStructType
+import com.google.example.MetaStore.{Partition, TableMetadata}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.CatalogTablePartition
 import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
@@ -47,9 +48,6 @@ object ExternalTableManager {
 
     tableInfo
   }
-
-  case class TableMetadata(schema: StructType, partitionColumnNames: Seq[String])
-  case class Partition(values: Seq[String], location: String)
 
   def createExternalTable(project: String,
                           dataset: String,

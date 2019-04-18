@@ -21,7 +21,7 @@ import java.nio.file.{Files, Paths}
 
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.bigquery.{BigQuery, BigQueryOptions}
-import com.google.example.ExternalTableManager.{Partition, TableMetadata}
+import com.google.example.MetaStore.{ExternalCatalog, Partition, SparkSQL}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 
@@ -41,8 +41,7 @@ object BQHiveLoader {
                     krbKeyTab: Option[String] = None,
                     krbPrincipal: Option[String] = None,
                     krbServiceName: Option[String] = Option("bqhiveorcloader"),
-                    partFilters: String = "",
-                    useYarn: Boolean = false)
+                    partFilters: String = "")
 
   val Parser: scopt.OptionParser[Config] =
     new scopt.OptionParser[Config]("BQHiveLoader") {
@@ -105,10 +104,6 @@ object BQHiveLoader {
         .action{(x, c) => c.copy(krbServiceName = Option(x))}
         .text("Kerberos service name")
 
-      opt[Boolean]("yarn")
-        .action{(x, c) => c.copy(useYarn = x)}
-        .text("flag to enable yarn (default: false)")
-
       note("Loads Hive external ORC tables into BigQuery")
 
       help("help")
@@ -126,13 +121,9 @@ object BQHiveLoader {
           Kerberos.configureJaas("BQHiveLoader", keytab, principal, serviceName)
         }
 
-        val sparkConf = new SparkConf()
-
         val spark = SparkSession
           .builder()
-          .master(if (config.useYarn) "yarn" else "local")
           .appName("BQHiveORCLoader")
-          .config(sparkConf)
           .enableHiveSupport
           .getOrCreate()
 
@@ -145,16 +136,10 @@ object BQHiveLoader {
   }
 
   def run(config: Config, spark: SparkSession): Unit = {
-    val table1 = spark.sessionState.catalog.externalCatalog
-      .getTable(config.hiveDbName, config.hiveTableName)
-    val table = TableMetadata(table1.schema, table1.partitionColumnNames)
-
-    val targetParts: Seq[Partition] =
-      ExternalTableManager
-        .findParts(config.hiveDbName, config.hiveTableName, config.partFilters, spark)
-        .map{part =>
-          Partition(part.spec.values.toArray.toSeq, part.location.toString)
-        }
+    val metaStore = ExternalCatalog(spark)
+    //val metaStore = SparkSQL(spark)
+    val table = metaStore.getTable(config.hiveDbName, config.hiveTableName)
+    val targetParts: Seq[Partition] = metaStore.findParts(config.hiveDbName, config.hiveTableName, config.partFilters)
 
     spark.sparkContext.parallelize(Seq(config))
       .foreach{c =>
@@ -164,13 +149,16 @@ object BQHiveLoader {
           case _ =>
             GoogleCredentials.getApplicationDefault
         }
+
         val bigquery: BigQuery = BigQueryOptions.newBuilder()
           .setLocation(c.bqLocation)
           .setCredentials(creds.createScoped(BigQueryScope, StorageScope))
           .setProjectId(config.bqProject)
           .build()
           .getService
-        ExternalTableManager.loadParts(c.bqProject, c.bqDataset, c.bqTable, table, targetParts, bigquery)
+
+        ExternalTableManager
+          .loadParts(c.bqProject, c.bqDataset, c.bqTable, table, targetParts, bigquery)
       }
   }
 }
