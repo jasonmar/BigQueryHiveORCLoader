@@ -167,6 +167,7 @@ object BQHiveLoader {
         val bigquery: BigQuery = BigQueryOptions.newBuilder()
           .setLocation(c.bqLocation)
           .setCredentials(creds.createScoped(BigQueryScope, StorageScope))
+          .setProjectId(config.bqProject)
           .build()
           .getService
         ExternalTableManager.loadParts(c.bqProject, c.bqDataset, c.bqTable, table, targetParts, bigquery)
