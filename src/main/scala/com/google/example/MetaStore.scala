@@ -16,31 +16,33 @@
 
 package com.google.example
 
-import com.google.example.ExternalTableManager.filterPartition
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 object MetaStore {
   case class TableMetadata(schema: StructType, partitionColumnNames: Seq[String])
 
-  case class Partition(values: Seq[String], location: String)
+  case class Partition(values: Seq[(String,String)], location: String)
 
   trait PartitionProvider {
     def findParts(db: String, table: String, partFilters: String): Seq[Partition]
+    def listPartitions(db: String, table: String): Seq[Partition]
     def getTable(db: String, table: String): TableMetadata
   }
 
   case class ExternalCatalog(spark: SparkSession) extends PartitionProvider {
     private val cat = spark.sessionState.catalog.externalCatalog
     override def findParts(db: String, table: String, partFilters: String): Seq[Partition] = {
-      val colNames = cat.getTable(db, table).partitionColumnNames
+      val filters = PartitionFilters.parse(partFilters)
+      listPartitions(db, table).filter(PartitionFilters.filter(_, filters))
+    }
+
+    override def listPartitions(db: String, table: String): Seq[Partition] = {
+      val colNames = getTable(db, table).partitionColumnNames
       cat.listPartitions(db, table)
-        .filter{partition =>
-          val partMap = colNames.zip(partition.spec.values).toMap
-          filterPartition(partMap, partFilters)
-        }
         .map{part =>
-          Partition(part.spec.values.toArray.toSeq, part.location.toString)
+          val values = colNames.zip(part.spec.values)
+          Partition(values, part.location.toString)
         }
     }
 
@@ -50,17 +52,77 @@ object MetaStore {
     }
   }
 
+  // convert region=EU/date=2019-04-11 to "region" -> "EU", "date" -> "2019-04-11"
+  def readPartSpec(s: String): Seq[(String,String)] = {
+    s.split('/')
+      .map{p =>
+        p.split('=') match {
+          case Array(l,r) =>
+            (l,r.stripPrefix("'").stripSuffix("'"))
+        }
+      }
+  }
+
+  def mkPartSpec(partValues: Iterable[(String,String)]): String =
+    partValues.map{x => s"${x._1}='${x._2}'"}.mkString(",")
+
   case class SparkSQL(spark: SparkSession) extends PartitionProvider {
     override def findParts(db: String, table: String, partFilters: String): Seq[Partition] = {
-      spark.sql(s"describe formatted $table").show(numRows = 100, truncate = false)
-      spark.sql(s"show partitions $table").show(numRows = 100, truncate = false)
-      //spark.sql(s"describe formatted $table partition('$part')").show(numRows = 100, truncate = false)
-      Seq.empty
+      val filters = PartitionFilters.parse(partFilters)
+      listPartitions(db, table).filter(PartitionFilters.filter(_, filters))
+    }
+
+    override def listPartitions(db: String, table: String): Seq[Partition] = {
+      val partValues: Seq[Seq[(String,String)]] = spark.sql(s"show partitions $table")
+        .collect()
+        .map{row =>
+          val partition = row.getString(row.fieldIndex("partition"))
+          readPartSpec(partition)
+        }
+
+      partValues.map{partValues =>
+        val partSpec = mkPartSpec(partValues)
+        val data = spark
+          .sql(s"describe formatted $table partition($partSpec)")
+          .drop("comment")
+          .collect()
+          .map{row =>
+            val colName = row.getString(row.fieldIndex("col_name"))
+            val dataType = row.getString(row.fieldIndex("data_type"))
+            (colName, dataType)
+          }
+        parsePartitionDetails(partValues, data)
+      }
     }
 
     override def getTable(db: String, table: String): TableMetadata = {
-      TableMetadata(StructType(Seq.empty[StructField]), Seq.empty)
+      val data = spark.sql(s"describe formatted $table")
+        .drop("comment")
+        .collect()
+        .map{row =>
+          val colName = row.getString(row.fieldIndex("col_name"))
+          val dataType = row.getString(row.fieldIndex("data_type"))
+          (colName, dataType)
+        }
+      parseTableDetails(data)
+    }
+
+    private def parseTableDetails(data: Seq[(String,String)]): TableMetadata = {
+      val fields = data.takeWhile(!_._1.startsWith("#"))
+        .map(Mapping.convertTuple)
+      val schema = StructType(fields)
+
+      val partColNames = data.map(_._1)
+        .dropWhile(!_.startsWith("#"))
+        .dropWhile(_.startsWith("#"))
+        .takeWhile(_.trim.nonEmpty)
+
+      TableMetadata(schema, partColNames)
+    }
+
+    private def parsePartitionDetails(partValues: Seq[(String,String)], data: Seq[(String,String)]): Partition = {
+      val location = data.filter(_._1 == "Location").head._2
+      Partition(partValues, location)
     }
   }
-
 }

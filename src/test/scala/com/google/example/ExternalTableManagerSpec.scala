@@ -17,7 +17,8 @@
 package com.google.example
 
 import com.google.cloud.bigquery.{BigQuery, BigQueryOptions, StandardTableDefinition, TableId, TableInfo}
-import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType}
+import com.google.example.MetaStore.Partition
+import org.apache.spark.sql.types._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
 
@@ -44,8 +45,9 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
   val TestBucket = "bq_hive_load_demo"
   val TestTable = s"test_1541"
 
-  val PartColNames = Seq("date", "region")
-  val PartValues = Seq("2019-04-11", "US")
+  val TestPartition = Partition(Seq(("region", "US"),("date", "2019-04-11")),"")
+  //val PartColNames = Seq("date", "region")
+  //val PartValues = Seq("2019-04-11", "US")
   val LoadDataset = "load_tmp"
   val TargetDataset = "load_target"
   val ExtTableId = TableId.of(TestProject,LoadDataset,TestTable+"_ext")
@@ -74,11 +76,11 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
 
   "ExternalTableManager" should "Generate SQL" in {
     val extTable = TableId.of("project", "dataset", "table")
-    val generatedSql = ExternalTableManager.generateSelectFromEternalTable(extTable, PartColNames, TestSchema, PartValues)
+    val generatedSql = ExternalTableManager.generateSelectFromExternalTable(extTable, TestSchema, TestPartition)
     val expectedSql =
       """select
-        |  '2019-04-11' as date,
         |  'US' as region,
+        |  '2019-04-11' as date,
         |  id as id,
         |  x as x,
         |  y as y,
@@ -102,13 +104,12 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
 
   it should "select into new table" in {
     val bq = getBigQuery
-    val tbl = bq.create(TableInfo.of(TargetTableId, StandardTableDefinition.of(Mapping.convertStructType(TestSchema))))
+    bq.create(TableInfo.of(TargetTableId, StandardTableDefinition.of(Mapping.convertStructType(TestSchema))))
     Thread.sleep(5000)
     ExternalTableManager.loadPart(
       TargetTableId,
       TestSchema,
-      PartColNames,
-      PartValues,
+      TestPartition,
       ExtTableId,
       bq,
       batch = false

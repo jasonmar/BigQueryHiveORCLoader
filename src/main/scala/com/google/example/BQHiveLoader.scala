@@ -16,13 +16,7 @@
 
 package com.google.example
 
-import java.io.ByteArrayInputStream
-import java.nio.file.{Files, Paths}
-
-import com.google.auth.oauth2.GoogleCredentials
-import com.google.cloud.bigquery.{BigQuery, BigQueryOptions}
-import com.google.example.MetaStore.{ExternalCatalog, Partition, SparkSQL}
-import org.apache.spark.SparkConf
+import com.google.example.MetaStore.{Partition, SparkSQL}
 import org.apache.spark.sql.SparkSession
 
 object BQHiveLoader {
@@ -136,29 +130,13 @@ object BQHiveLoader {
   }
 
   def run(config: Config, spark: SparkSession): Unit = {
-    val metaStore = ExternalCatalog(spark)
-    //val metaStore = SparkSQL(spark)
+    //val metaStore = ExternalCatalog(spark)
+    val metaStore = SparkSQL(spark)
     val table = metaStore.getTable(config.hiveDbName, config.hiveTableName)
-    val targetParts: Seq[Partition] = metaStore.findParts(config.hiveDbName, config.hiveTableName, config.partFilters)
+    val partitions: Seq[Partition] = metaStore.findParts(config.hiveDbName, config.hiveTableName, config.partFilters)
 
-    spark.sparkContext.parallelize(Seq(config))
-      .foreach{c =>
-        val creds: GoogleCredentials = c.bqKeyFile match {
-          case Some(f) =>
-            GoogleCredentials.fromStream(new ByteArrayInputStream(Files.readAllBytes(Paths.get(f))))
-          case _ =>
-            GoogleCredentials.getApplicationDefault
-        }
-
-        val bigquery: BigQuery = BigQueryOptions.newBuilder()
-          .setLocation(c.bqLocation)
-          .setCredentials(creds.createScoped(BigQueryScope, StorageScope))
-          .setProjectId(config.bqProject)
-          .build()
-          .getService
-
-        ExternalTableManager
-          .loadParts(c.bqProject, c.bqDataset, c.bqTable, table, targetParts, bigquery)
-      }
+    val sc = spark.sparkContext
+    sc.runJob(rdd = sc.makeRDD(Seq(config),1),
+      func = SparkJobs.loadPartitionsJob(table, partitions))
   }
 }

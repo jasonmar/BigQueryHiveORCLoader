@@ -18,7 +18,7 @@ package com.google.example
 
 import com.google.cloud.bigquery._
 import org.apache.spark.sql.types.DataTypes._
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, StructField, StructType}
 
 object Mapping {
   def convertStructType(fields: StructType): Schema = {
@@ -49,5 +49,31 @@ object Mapping {
       case _ =>
         throw new RuntimeException(s"Unexpected DataType '$dataTypeName'")
     }
+  }
+
+  def getDataTypeForName(dataTypeName: String): DataType = {
+    dataTypeName match {
+      case x if x == StringType.typeName => StringType
+      case x if x == IntegerType.typeName => IntegerType
+      case x if x == "int" => IntegerType
+      case x if x == "bigint" => LongType
+      case x if x == LongType.typeName => LongType
+      case x if x == DoubleType.typeName => DoubleType
+      case x if x == DateType.typeName => DateType
+      case x if x == TimestampType.typeName => TimestampType
+      case x if x == FloatType.typeName => FloatType
+      case x if x == ShortType.typeName => ShortType
+      case x if x == BooleanType.typeName => BooleanType
+      case x if x == ByteType.typeName => ByteType
+      case x if x.startsWith("decimal") => DecimalType(19,9)
+      case x if x.startsWith("array") => ArrayType(IntegerType)
+      case x if x.startsWith("struct") => StructType(Seq.empty[StructField])
+      case _ =>
+        throw new RuntimeException(s"Unexpected DataType '$dataTypeName'")
+    }
+  }
+
+  def convertTuple(x: (String, String)): StructField = {
+    StructField(x._1, getDataTypeForName(x._2))
   }
 }

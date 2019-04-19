@@ -16,12 +16,10 @@
 
 package com.google.example
 
+import com.google.common.base.Preconditions.checkArgument
 import com.google.common.collect.ImmutableMap
 import com.sun.security.auth.module.Krb5LoginModule
-import javax.security.auth.login.AppConfigurationEntry
-import javax.security.auth.login.Configuration
-
-import com.google.common.base.Preconditions.checkArgument
+import javax.security.auth.login.{AppConfigurationEntry, Configuration}
 
 object Kerberos {
   def configureJaas(configName: String, keyTab: String, principal: String, serviceName: String): Unit = {

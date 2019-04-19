@@ -16,7 +16,6 @@
 
 package com.google.example
 
-import com.google.example.MetaStore.SparkSQL
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SaveMode, SparkSession}
@@ -176,8 +175,20 @@ class ORCSpec extends FlatSpec with BeforeAndAfterAll {
     }
   }
 
-  it should "query partitions" in {
-    val metaStore = SparkSQL(getSpark)
-    metaStore.findParts(DBName, TableName, "")
+  //TODO P3 checking existing partition
+  it should "query partitions from External Catalog" in {
+    val metaStore = MetaStore.ExternalCatalog(getSpark)
+    val table = metaStore.getTable(DBName, TableName)
+    val parts = metaStore.findParts(DBName, TableName, "region IN (EU,US) and date >= 2019-04-11 AND date <= 2019-04-12 ")
+    assert(table.partitionColumnNames == Seq("region","date"))
+    assert(parts.length == 4)
+  }
+
+  it should "query partitions from Spark SQL" in {
+    val metaStore = MetaStore.SparkSQL(getSpark)
+    val table = metaStore.getTable(DBName, TableName)
+    val parts = metaStore.findParts(DBName, TableName, "region=EU and date=2019-04-11")
+    assert(table.partitionColumnNames == Seq("region","date"))
+    assert(parts.length == 1)
   }
 }
