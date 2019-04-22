@@ -16,7 +16,7 @@
 
 package com.google.example
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
 
 object MetaStore {
@@ -25,17 +25,20 @@ object MetaStore {
   case class Partition(values: Seq[(String,String)], location: String)
 
   trait PartitionProvider {
-    def findParts(db: String, table: String, partFilters: String): Seq[Partition]
+    def filterPartitions(db: String, table: String, filterExpression: String): Seq[Partition] = {
+      PartitionFilters.parse(filterExpression) match {
+        case Some(filter) =>
+          filter(listPartitions(db, table))
+        case _ =>
+          throw new IllegalArgumentException(s"Invalid filter expression '$filterExpression'")
+      }
+    }
     def listPartitions(db: String, table: String): Seq[Partition]
     def getTable(db: String, table: String): TableMetadata
   }
 
   case class ExternalCatalog(spark: SparkSession) extends PartitionProvider {
     private val cat = spark.sessionState.catalog.externalCatalog
-    override def findParts(db: String, table: String, partFilters: String): Seq[Partition] = {
-      val filters = PartitionFilters.parse(partFilters)
-      listPartitions(db, table).filter(PartitionFilters.filter(_, filters))
-    }
 
     override def listPartitions(db: String, table: String): Seq[Partition] = {
       val colNames = getTable(db, table).partitionColumnNames
@@ -66,63 +69,90 @@ object MetaStore {
   def mkPartSpec(partValues: Iterable[(String,String)]): String =
     partValues.map{x => s"${x._1}='${x._2}'"}.mkString(",")
 
+  def parsePartitionTable(df: DataFrame): Seq[Seq[(String,String)]] = {
+    df.collect()
+      .map{row =>
+        val partition = row.getString(row.fieldIndex("partition"))
+        readPartSpec(partition)
+      }
+  }
+
+  def parsePartitionDesc(partValues: Seq[(String,String)], df: DataFrame): Partition = {
+    val tuples = df.drop("comment")
+      .collect()
+      .map{row =>
+        val colName = row.getString(row.fieldIndex("col_name"))
+        val dataType = row.getString(row.fieldIndex("data_type"))
+        (colName, dataType)
+      }
+    parsePartitionDetails(partValues, tuples)
+  }
+
+  def parsePartitionDetails(partValues: Seq[(String,String)], data: Seq[(String,String)]): Partition = {
+    val location = data.filter(_._1 == "Location").head._2
+    Partition(partValues, location)
+  }
+
+  def parseTableDesc(df: DataFrame): TableMetadata = {
+    val tuples = df.drop("comment")
+      .collect()
+      .map{row =>
+        val colName = row.getString(row.fieldIndex("col_name"))
+        val dataType = row.getString(row.fieldIndex("data_type"))
+        (colName, dataType)
+      }
+    parseTableDetails(tuples)
+  }
+
+  def parseTableDetails(data: Seq[(String,String)]): TableMetadata = {
+    val fields = data.takeWhile(!_._1.startsWith("#"))
+      .map(Mapping.convertTuple)
+    val schema = StructType(fields)
+
+    val partColNames = data.map(_._1)
+      .dropWhile(!_.startsWith("#"))
+      .dropWhile(_.startsWith("#"))
+      .takeWhile(_.trim.nonEmpty)
+
+    TableMetadata(schema, partColNames)
+  }
+
   case class SparkSQL(spark: SparkSession) extends PartitionProvider {
-    override def findParts(db: String, table: String, partFilters: String): Seq[Partition] = {
-      val filters = PartitionFilters.parse(partFilters)
-      listPartitions(db, table).filter(PartitionFilters.filter(_, filters))
+    override def listPartitions(db: String, table: String): Seq[Partition] = {
+      parsePartitionTable(spark.sql(s"show partitions $table"))
+        .map{partValues =>
+          val partSpec = mkPartSpec(partValues)
+          val df = spark.sql(s"describe formatted $table partition($partSpec)")
+          parsePartitionDesc(partValues, df)
+        }
+    }
+
+    override def getTable(db: String, table: String): TableMetadata =
+      parseTableDesc(spark.sql(s"describe formatted $table"))
+  }
+
+  case class JDBC(jdbcUrl: String, spark: SparkSession) extends PartitionProvider {
+    def sql(query: String): DataFrame = {
+      spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("query", query)
+        .option("driver", "org.apache.hive.jdbc.HiveDriver")
+        .option("numPartitions","1")
+        .option("queryTimeout","15")
+        .load()
     }
 
     override def listPartitions(db: String, table: String): Seq[Partition] = {
-      val partValues: Seq[Seq[(String,String)]] = spark.sql(s"show partitions $table")
-        .collect()
-        .map{row =>
-          val partition = row.getString(row.fieldIndex("partition"))
-          readPartSpec(partition)
+      parsePartitionTable(sql(s"show partitions $table"))
+        .map{partValues =>
+          val partSpec = mkPartSpec(partValues)
+          val df = sql(s"describe formatted $table partition($partSpec)")
+          parsePartitionDesc(partValues, df)
         }
-
-      partValues.map{partValues =>
-        val partSpec = mkPartSpec(partValues)
-        val data = spark
-          .sql(s"describe formatted $table partition($partSpec)")
-          .drop("comment")
-          .collect()
-          .map{row =>
-            val colName = row.getString(row.fieldIndex("col_name"))
-            val dataType = row.getString(row.fieldIndex("data_type"))
-            (colName, dataType)
-          }
-        parsePartitionDetails(partValues, data)
-      }
     }
 
     override def getTable(db: String, table: String): TableMetadata = {
-      val data = spark.sql(s"describe formatted $table")
-        .drop("comment")
-        .collect()
-        .map{row =>
-          val colName = row.getString(row.fieldIndex("col_name"))
-          val dataType = row.getString(row.fieldIndex("data_type"))
-          (colName, dataType)
-        }
-      parseTableDetails(data)
-    }
-
-    private def parseTableDetails(data: Seq[(String,String)]): TableMetadata = {
-      val fields = data.takeWhile(!_._1.startsWith("#"))
-        .map(Mapping.convertTuple)
-      val schema = StructType(fields)
-
-      val partColNames = data.map(_._1)
-        .dropWhile(!_.startsWith("#"))
-        .dropWhile(_.startsWith("#"))
-        .takeWhile(_.trim.nonEmpty)
-
-      TableMetadata(schema, partColNames)
-    }
-
-    private def parsePartitionDetails(partValues: Seq[(String,String)], data: Seq[(String,String)]): Partition = {
-      val location = data.filter(_._1 == "Location").head._2
-      Partition(partValues, location)
+      parseTableDesc(sql(s"describe formatted $table"))
     }
   }
 }

@@ -19,7 +19,30 @@ package com.google.example
 import com.google.example.MetaStore.Partition
 
 object PartitionFilters {
+  case class PartitionFilter(expressions: Seq[FilterExpression]) {
+    /** Applies Partition Filters
+      * @param partition Partition to be evaluated
+      * @return false if Partition is rejected by a filter expression
+      */
+    def apply(partition: Partition): Boolean = {
+      val filters: Map[String,Seq[FilterExpression]] = expressions.groupBy(_.l)
+      for ((col, value) <- partition.values) {
+        filters.get(col) match {
+          case Some(filter) if filter.exists(_.reject(col, value)) =>
+            return false
+          case _ =>
+        }
+      }
+      true
+    }
+
+    def apply(partitions: Seq[Partition]): Seq[Partition] = {
+      partitions.filter(this(_))
+    }
+  }
+
   sealed trait FilterExpression {
+    val l: String
     def apply(column: String, value: String): Boolean
     def reject(column: String, value: String): Boolean = !apply(column, value)
   }
@@ -71,43 +94,42 @@ object PartitionFilters {
     }
   }
 
-  def parse(expr: String): Map[String,Seq[FilterExpression]] = {
+  def parse(expr: String): Option[PartitionFilter] = {
     if (expr.nonEmpty){
-      expr.replaceAllLiterally(" and ", " AND ")
+      val exprs = expr.replaceAllLiterally(" and ", " AND ")
         .replaceAllLiterally(" And ", " AND ")
         .replaceAllLiterally(" in ", " IN ")
         .replaceAllLiterally(" In ", " IN ")
         .split(" AND ")
         .flatMap(parseExpression)
-        .groupBy(_._1)
-        .mapValues{_.map{_._2}.toSeq}
-    } else Map.empty
+      Option(PartitionFilter(exprs))
+    } else None
   }
 
-  def parseExpression(expr: String): Option[(String,FilterExpression)] = {
-    if (expr.contains('=')) {
-      expr.split('=').map(_.trim) match {
-        case Array(l,r) => Option((l, Equals(l, r)))
-        case _ => None
-      }
-    } else if (expr.contains("<=")) {
+  def parseExpression(expr: String): Option[FilterExpression] = {
+    if (expr.contains("<=")) {
       expr.split("<=").map(_.trim) match {
-        case Array(l,r) => Option((l, LessThanOrEq(l, r)))
+        case Array(l,r) => Option(LessThanOrEq(l, r))
         case _ => None
       }
     } else if (expr.contains(">=")) {
       expr.split(">=").map(_.trim) match {
-        case Array(l,r) => Option((l, GreaterThanOrEq(l, r)))
+        case Array(l,r) => Option(GreaterThanOrEq(l, r))
+        case _ => None
+      }
+    } else if (expr.contains('=')) {
+      expr.split('=').map(_.trim) match {
+        case Array(l,r) => Option(Equals(l, r))
         case _ => None
       }
     } else if (expr.contains('<')) {
       expr.split('<').map(_.trim) match {
-        case Array(l,r) => Option((l, LessThan(l, r)))
+        case Array(l,r) => Option(LessThan(l, r))
         case _ => None
       }
     } else if (expr.contains('>')) {
       expr.split('>').map(_.trim) match {
-        case Array(l,r) => Option((l, GreaterThan(l, r)))
+        case Array(l,r) => Option(GreaterThan(l, r))
         case _ => None
       }
     } else if (expr.contains(" IN ")) {
@@ -115,20 +137,9 @@ object PartitionFilters {
         case Array(l,r) =>
           val set = r.stripPrefix("(").stripSuffix(")")
             .split(',').map(_.trim).toSet
-          Option((l, In(l, set)))
+          Option(In(l, set))
         case _ => None
       }
     } else None
-  }
-
-  def filter(partition: Partition, filters: Map[String,Seq[FilterExpression]]): Boolean = {
-    for ((col, value) <- partition.values) {
-      filters.get(col) match {
-          case Some(filter) if filter.exists(_.reject(col, value)) =>
-            return false
-          case _ =>
-        }
-    }
-    true
   }
 }

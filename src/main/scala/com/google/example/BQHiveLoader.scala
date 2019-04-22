@@ -16,7 +16,7 @@
 
 package com.google.example
 
-import com.google.example.MetaStore.{Partition, SparkSQL}
+import com.google.example.MetaStore.{JDBC, Partition, SparkSQL}
 import org.apache.spark.sql.SparkSession
 
 object BQHiveLoader {
@@ -35,7 +35,8 @@ object BQHiveLoader {
                     krbKeyTab: Option[String] = None,
                     krbPrincipal: Option[String] = None,
                     krbServiceName: Option[String] = Option("bqhiveorcloader"),
-                    partFilters: String = "")
+                    partFilters: String = "",
+                    jdbcUrl: String = "")
 
   val Parser: scopt.OptionParser[Config] =
     new scopt.OptionParser[Config]("BQHiveLoader") {
@@ -131,9 +132,10 @@ object BQHiveLoader {
 
   def run(config: Config, spark: SparkSession): Unit = {
     //val metaStore = ExternalCatalog(spark)
-    val metaStore = SparkSQL(spark)
+    //val metaStore = SparkSQL(spark)
+    val metaStore = JDBC(config.jdbcUrl, spark)
     val table = metaStore.getTable(config.hiveDbName, config.hiveTableName)
-    val partitions: Seq[Partition] = metaStore.findParts(config.hiveDbName, config.hiveTableName, config.partFilters)
+    val partitions: Seq[Partition] = metaStore.filterPartitions(config.hiveDbName, config.hiveTableName, config.partFilters)
 
     val sc = spark.sparkContext
     sc.runJob(rdd = sc.makeRDD(Seq(config),1),

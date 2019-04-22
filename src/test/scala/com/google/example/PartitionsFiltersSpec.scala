@@ -23,23 +23,24 @@ class PartitionsFiltersSpec extends FlatSpec {
   "PartitionFilters" should "parse filter expressions" in {
     val expr = """region=US and date=2019-04-11"""
     val got = PartitionFilters.parse(expr)
-    val expected = Map(
-      "region" -> Seq(Equals("region", "US")),
-      "date" -> Seq(Equals("date", "2019-04-11"))
+    val expected = PartitionFilter(
+      Seq(
+        Equals("region", "US"),
+        Equals("date", "2019-04-11"))
     )
-    assert(got == expected)
+    assert(got.contains(expected))
   }
 
   it should "parse range expressions" in {
     val expr = """date>2019-04-11 and date<2019-04-15"""
     val got = PartitionFilters.parse(expr)
-    val expected = Map(
-      "date" -> Seq(
+    val expected = PartitionFilter(
+      Seq(
         GreaterThan("date", "2019-04-11"),
         LessThan("date", "2019-04-15")
       )
     )
-    assert(got == expected)
+    assert(got.contains(expected))
   }
 
   it should "reject" in {
