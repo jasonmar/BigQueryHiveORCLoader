@@ -16,6 +16,7 @@
 
 package com.google.example
 
+import com.google.example.ExternalTableManager.{Orc, StorageFormat}
 import com.google.example.MetaStore.{JDBC, Partition, SparkSQL}
 import org.apache.spark.sql.SparkSession
 
@@ -25,12 +26,16 @@ object BQHiveLoader {
 
   case class Config(hiveDbName: String = "",
                     hiveTableName: String = "",
-                    partCol: Option[String] = None,
+                    clusterColumns: Seq[String]= Seq.empty,
+                    partitionColumn: Option[String] = None,
                     bqProject: String = "",
                     bqDataset: String = "",
                     bqTable: String = "",
                     bqLocation: String = "US",
                     bqKeyFile: Option[String] = None,
+                    bqCreateTableKeyFile: Option[String] = None,
+                    bqWriteKeyFile: Option[String] = None,
+                    storageFormat: Option[String] = None,
                     gcsKeyFile: Option[String] = None,
                     krbKeyTab: Option[String] = None,
                     krbPrincipal: Option[String] = None,
@@ -52,13 +57,25 @@ object BQHiveLoader {
         .action{(x, c) => c.copy(hiveTableName = x)}
         .text("source Hive table name")
 
-      opt[String]('c', "dateColumn")
-        .action{(x, c) => c.copy(partCol = Option(x))}
-        .text("name of date partition column")
+      opt[String]('c', "partitionColumn")
+        .action{(x, c) => c.copy(partitionColumn = Option(x))}
+        .text("name of partition column")
+
+      opt[Seq[String]]("clusterCols")
+        .action{(x, c) => c.copy(clusterColumns = x)}
+        .text("Cluster columns if creating BigQuery table")
 
       opt[String]("bqKeyFile")
         .action{(x, c) => c.copy(bqKeyFile = Option(x))}
         .text("path to keyfile for BigQuery")
+
+      opt[String]("bqCreateTableKeyFile")
+        .action{(x, c) => c.copy(bqCreateTableKeyFile = Option(x))}
+        .text("path to keyfile for BigQuery external table creation")
+
+      opt[String]("bqWriteKeyFile")
+        .action{(x, c) => c.copy(bqWriteKeyFile = Option(x))}
+        .text("path to keyfile for BigQuery writes")
 
       opt[String]("gcsKeyFile")
         .action{(x, c) => c.copy(gcsKeyFile = Option(x))}
@@ -87,6 +104,15 @@ object BQHiveLoader {
         .action{(x, c) => c.copy(bqLocation = x)}
         .text("BigQuery Location (default: US)")
 
+      opt[String]("storageFormat")
+        .action{(x, c) => c.copy(storageFormat = Option(x))}
+        .text("Storage Format (default: orc)")
+        .validate{s =>
+          if (!Set("orc", "parquet", "avro").contains(s.toLowerCase))
+            failure(s"unrecognized storage format '$s'")
+          else success
+        }
+
       opt[String]("keyTab")
         .action{(x, c) => c.copy(krbKeyTab = Option(x))}
         .text("Kerberos keytab location (path/to/krb5.keytab)")
@@ -103,6 +129,18 @@ object BQHiveLoader {
 
       help("help")
         .text("prints this usage text")
+
+      checkConfig{c =>
+        val bqKey = c.bqKeyFile.isDefined
+        val bqCreateKey = c.bqCreateTableKeyFile.isDefined
+        val bqWriteKey = c.bqWriteKeyFile.isDefined
+
+        if (bqKey && bqCreateKey)
+          failure("Can't set both bqKeyFile and bqCreateTableKeyFile")
+        else if (bqKey && bqWriteKey)
+          failure("Can't set both bqKeyFile and bqWriteKeyFile")
+        else success
+      }
     }
 
   def main(args: Array[String]): Unit = {

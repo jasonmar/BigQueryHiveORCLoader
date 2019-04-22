@@ -20,10 +20,12 @@ import java.io.ByteArrayInputStream
 import java.nio.file.{Files, Paths}
 
 import com.google.auth.oauth2.GoogleCredentials
-import com.google.cloud.bigquery.{BigQuery, BigQueryOptions}
+import com.google.cloud.bigquery.{BigQuery, BigQueryOptions, Clustering, StandardTableDefinition, TableId, TableInfo, TimePartitioning}
 import com.google.cloud.storage.{Storage, StorageOptions}
 import com.google.example.BQHiveLoader.{BigQueryScope, Config, StorageScope}
+import com.google.example.ExternalTableManager.Orc
 import com.google.example.MetaStore.{Partition, TableMetadata}
+import org.apache.spark.sql.types.DateType
 
 object SparkJobs {
   def loadPartitionsJob(table: TableMetadata, partitions: Seq[Partition]): Iterator[Config] => Unit =
@@ -33,7 +35,9 @@ object SparkJobs {
     // TODO add another credential for bigquery writes
     val creds: GoogleCredentials = c.bqKeyFile match {
       case Some(f) =>
-        GoogleCredentials.fromStream(new ByteArrayInputStream(Files.readAllBytes(Paths.get(f)))).createScoped(BigQueryScope)
+        GoogleCredentials
+          .fromStream(new ByteArrayInputStream(Files.readAllBytes(Paths.get(f))))
+          .createScoped(BigQueryScope)
       case _ =>
         GoogleCredentials.getApplicationDefault
     }
@@ -58,11 +62,48 @@ object SparkJobs {
       .build()
       .getService
 
+    // TODO detect from metadata
+    val storageFormat = c.storageFormat
+        .map(ExternalTableManager.parseStorageFormat)
+        .getOrElse(Orc)
+
+    import scala.collection.JavaConverters._
+    val destTableId = TableId.of(c.bqProject, c.bqDataset, c.bqTable)
+    val destTableExists = bigquery.getTable(destTableId).exists()
+    if (!destTableExists) {
+      require(c.clusterColumns.nonEmpty, "destination table does not exist, clusterColumns must not be empty")
+      require(c.partitionColumn.nonEmpty, "destination table does not exist, partitionColumn must not be empty")
+      val destTableSchema = if (c.partitionColumn.nonEmpty) {
+        Mapping.convertStructType(table.schema)
+      } else {
+        Mapping.convertStructType(table.schema.add("unused", DateType))
+      }
+
+      val destTableDefBuilder = StandardTableDefinition.newBuilder()
+        .setLocation(c.bqLocation)
+        .setSchema(destTableSchema)
+        .setTimePartitioning(TimePartitioning.newBuilder(TimePartitioning.Type.DAY)
+          .setField(c.partitionColumn.map(_.toLowerCase)
+            .filterNot(_ == "none")
+            .getOrElse("unused"))
+          .build())
+
+      if (c.clusterColumns.map(_.toLowerCase) != Seq("none")) {
+        destTableDefBuilder.setClustering(Clustering.newBuilder()
+          .setFields(c.clusterColumns.map(_.toLowerCase).asJava).build())
+      }
+
+      val tableInfo = TableInfo.newBuilder(destTableId, destTableDefBuilder.build())
+        .build()
+      bigquery.create(tableInfo)
+    }
+
     ExternalTableManager.loadParts(project = c.bqProject,
                                    dataset = c.bqDataset,
                                    tableName = c.bqTable,
                                    tableMetadata = table,
                                    partitions = partitions,
+                                   storageFormat = storageFormat,
                                    bigquery = bigquery,
                                    gcs = gcs)
   }

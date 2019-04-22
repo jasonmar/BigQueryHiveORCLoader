@@ -17,6 +17,7 @@
 package com.google.example
 
 import com.google.cloud.bigquery.{BigQuery, BigQueryOptions, StandardTableDefinition, TableId, TableInfo}
+import com.google.example.ExternalTableManager.Orc
 import com.google.example.MetaStore.Partition
 import org.apache.spark.sql.types._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
@@ -98,6 +99,7 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
       ExtTableId,
       schema,
       locations,
+      Orc,
       getBigQuery)
     System.out.println(createdTable)
   }

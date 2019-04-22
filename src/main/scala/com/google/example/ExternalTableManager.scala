@@ -25,18 +25,44 @@ import com.google.example.MetaStore.{Partition, TableMetadata}
 import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 
 object ExternalTableManager {
+  sealed trait StorageFormat
+  case object Orc extends StorageFormat
+  case object Parquet extends StorageFormat
+  case object Avro extends StorageFormat
+
+  def parseStorageFormat(s: String): StorageFormat = {
+    s.toLowerCase match {
+      case "orc" => Orc
+      case "parquet" => Parquet
+      case "avro" => Avro
+      case _ => throw new IllegalArgumentException("invalid storage format")
+    }
+  }
+
   def defaultExpiration: Long = System.currentTimeMillis() + 1000*60*60*24*2 // 2 days
 
   def create(tableId: TableId,
              schema: Schema,
              sources: Seq[String],
+             storageFormat: StorageFormat,
              bigquery: BigQuery): TableInfo = {
 
     import scala.collection.JavaConverters.seqAsJavaListConverter
 
-    val tableDefinition = ExternalTableDefinition
-      .newBuilder(sources.map(_ + "/part*").asJava, null, FormatOptions.orc())
-      .build()
+    val tableDefinition = storageFormat match {
+      case Orc =>
+        ExternalTableDefinition
+          .newBuilder(sources.asJava, null, FormatOptions.orc())
+          .build()
+      case Parquet =>
+        ExternalTableDefinition
+          .newBuilder(sources.asJava, schema, FormatOptions.parquet())
+          .build()
+      case Avro =>
+        ExternalTableDefinition
+          .newBuilder(sources.asJava, schema, FormatOptions.avro())
+          .build()
+    }
 
     val tableInfo = TableInfo
       .newBuilder(tableId, tableDefinition)
@@ -57,6 +83,7 @@ object ExternalTableManager {
     )
     import scala.collection.JavaConverters.iterableAsScalaIterableConverter
     gcs.list(bucket, options:_*).iterateAll().asScala.toArray
+      .filterNot(_.getName.startsWith("."))
       .map{obj => s"gs://$bucket/${obj.getName}"}
   }
 
@@ -65,6 +92,7 @@ object ExternalTableManager {
                           table: String,
                           tableMetadata: TableMetadata,
                           part: Partition,
+                          storageFormat: StorageFormat,
                           bigquery: BigQuery,
                           gcs: Storage): TableInfo = {
     val extTableName = validBigQueryTableName(table + "_" + part.values.mkString("_"))
@@ -77,6 +105,7 @@ object ExternalTableManager {
     create(TableId.of(project, dataset, extTableName),
            schema = convertStructType(partSchema),
            sources = sources,
+           storageFormat = Orc,
            bigquery = bigquery)
   }
 
@@ -85,12 +114,13 @@ object ExternalTableManager {
                 tableName: String,
                 tableMetadata: TableMetadata,
                 partitions: Seq[Partition],
+                storageFormat: StorageFormat,
                 bigquery: BigQuery,
                 gcs: Storage): Seq[TableResult] = {
     partitions.map { part =>
       val extTable = createExternalTable(
         project, dataset, tableName,
-        tableMetadata, part, bigquery, gcs)
+        tableMetadata, part, storageFormat, bigquery, gcs)
 
       val renameOrcCols = hasOrcPositionalColNames(extTable.getTableId, bigquery)
 
