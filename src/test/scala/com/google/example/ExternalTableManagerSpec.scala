@@ -47,12 +47,10 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
   val TestTable = s"test_1541"
 
   val TestPartition = Partition(Seq(("region", "US"),("date", "2019-04-11")),"")
-  //val PartColNames = Seq("date", "region")
-  //val PartValues = Seq("2019-04-11", "US")
   val LoadDataset = "load_tmp"
   val TargetDataset = "load_target"
-  val ExtTableId = TableId.of(TestProject,LoadDataset,TestTable+"_ext")
-  val TargetTableId = TableId.of(TestProject,TargetDataset,TestTable)
+  val ExtTableId: TableId = TableId.of(TestProject,LoadDataset,TestTable+"_ext")
+  val TargetTableId: TableId = TableId.of(TestProject,TargetDataset,TestTable)
 
   def newClient(): BigQuery = {
     BigQueryOptions
@@ -77,7 +75,11 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
 
   "ExternalTableManager" should "Generate SQL" in {
     val extTable = TableId.of("project", "dataset", "table")
-    val generatedSql = ExternalTableManager.generateSelectFromExternalTable(extTable, TestSchema, TestPartition)
+    val generatedSql = ExternalTableManager.generateSelectFromExternalTable(
+      extTable = extTable,
+      schema = TestSchema,
+      partition = TestPartition,
+      unusedColumnName = "unused")
     val expectedSql =
       """select
         |  'US' as region,
@@ -109,11 +111,13 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
     bq.create(TableInfo.of(TargetTableId, StandardTableDefinition.of(Mapping.convertStructType(TestSchema))))
     Thread.sleep(5000)
     ExternalTableManager.loadPart(
-      TargetTableId,
-      TestSchema,
-      TestPartition,
-      ExtTableId,
-      bq,
+      destTableId = TargetTableId,
+      schema = TestSchema,
+      partition = TestPartition,
+      extTableId = ExtTableId,
+      unusedColumnName = "unused",
+      partColFormats = Map.empty,
+      bigqueryWrite = bq,
       batch = false
     )
   }

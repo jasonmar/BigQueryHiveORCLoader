@@ -39,7 +39,7 @@ object ExternalTableManager {
     }
   }
 
-  def defaultExpiration: Long = System.currentTimeMillis() + 1000*60*60*24*2 // 2 days
+  def defaultExpiration: Long = System.currentTimeMillis() + 1000*60*60*6 // 6 hours
 
   def create(tableId: TableId,
              schema: Schema,
@@ -69,7 +69,8 @@ object ExternalTableManager {
       .setExpirationTime(defaultExpiration)
       .build()
 
-    bigquery.create(tableInfo)
+    if (!bigquery.getTable(tableInfo.getTableId).exists())
+      bigquery.create(tableInfo)
 
     tableInfo
   }
@@ -114,22 +115,31 @@ object ExternalTableManager {
                 tableName: String,
                 tableMetadata: TableMetadata,
                 partitions: Seq[Partition],
+                unusedColumnName: String,
+                partColFormats: Map[String,String],
                 storageFormat: StorageFormat,
-                bigquery: BigQuery,
+                bigqueryCreate: BigQuery,
+                bigqueryWrite: BigQuery,
+                overwrite: Boolean,
+                batch: Boolean,
                 gcs: Storage): Seq[TableResult] = {
     partitions.map { part =>
       val extTable = createExternalTable(
         project, dataset, tableName,
-        tableMetadata, part, storageFormat, bigquery, gcs)
+        tableMetadata, part, storageFormat, bigqueryCreate, gcs)
 
-      val renameOrcCols = hasOrcPositionalColNames(extTable.getTableId, bigquery)
+      val renameOrcCols = hasOrcPositionalColNames(extTable.getTableId, bigqueryCreate)
 
       loadPart(
         destTableId = TableId.of(project, dataset, tableName),
         schema = tableMetadata.schema,
         partition = part,
         extTableId = extTable.getTableId,
-        bigquery = bigquery,
+        unusedColumnName = unusedColumnName,
+        partColFormats = partColFormats,
+        bigqueryWrite = bigqueryWrite,
+        batch = batch,
+        overwrite = overwrite,
         renameOrcCols = renameOrcCols)
     }
   }
@@ -138,11 +148,19 @@ object ExternalTableManager {
                schema: StructType,
                partition: Partition,
                extTableId: TableId,
-               bigquery: BigQuery,
+               unusedColumnName: String,
+               partColFormats: Map[String,String],
+               bigqueryWrite: BigQuery,
                overwrite: Boolean = false,
                batch: Boolean = true,
                renameOrcCols: Boolean = false): TableResult = {
-    val sql = generateSelectFromExternalTable(extTableId, schema, partition, renameOrcCols)
+    val sql = generateSelectFromExternalTable(
+      extTable = extTableId,
+      schema = schema,
+      partition = partition,
+      unusedColumnName = unusedColumnName,
+      formats = partColFormats,
+      renameOrcCols = renameOrcCols)
 
     val query = QueryJobConfiguration
       .newBuilder(sql)
@@ -154,7 +172,7 @@ object ExternalTableManager {
       .setUseQueryCache(false)
       .build()
 
-    bigquery.query(query, JobId.newBuilder()
+    bigqueryWrite.query(query, JobId.newBuilder()
       .setProject(extTableId.getProject)
       .setLocation("US")
       .setJob(jobid(destTableId, partition))
@@ -199,21 +217,48 @@ object ExternalTableManager {
     ).take(1024)
   }
 
-  // TODO convert week number to date
-  // TODO add format option
+  /** Interprets partition column value string according to a known format
+    *
+    * @param colName name of column to be formatted
+    * @param colValue value to be formatted
+    * @param colFormat format string used to identify conversion function
+    * @return SQL fragment "$colValue as '$colName'"
+    */
+  def format(colName: String, colValue: String, colFormat: String): String = {
+    if (colFormat == "YYYYMM") {
+      val year = colValue.substring(0,4)
+      val month = colValue.substring(4,6)
+      s"'$year-$month-01' as $colName"
+    } else if (colFormat.toLowerCase == "week") {
+      // TODO convert week number to date
+      throw new NotImplementedError("conversion of week number to date not implemented")
+    } else {
+      throw new IllegalArgumentException(s"unsupported colFormat '$colFormat'")
+    }
+  }
+
   def generateSelectFromExternalTable(extTable: TableId,
                                       schema: StructType,
                                       partition: Partition,
+                                      unusedColumnName: String,
+                                      formats: Map[String,String] = Map.empty,
                                       renameOrcCols: Boolean = false): String = {
     val fields = partition.values.map(_._1)
 
     val partVals = partition.values
       .map{x =>
-        schema.find(_.name == x._1) match {
-          case Some(field) if field.dataType.typeName == IntegerType.typeName || field.dataType.typeName == LongType.typeName =>
-            s"${x._2} as ${x._1}"
-          case _ =>
-            s"'${x._2}' as ${x._1}"
+        val (colName, colValue) = x
+        if (colName == unusedColumnName) {
+          s"NULL as $colName"
+        } else if (formats.contains(colName)){
+          format(colName, colValue, formats(colName))
+        } else {
+          schema.find(_.name == colName) match {
+            case Some(field) if field.dataType.typeName == IntegerType.typeName || field.dataType.typeName == LongType.typeName =>
+              s"$colValue as $colName"
+            case _ =>
+              s"'$colValue' as $colName"
+          }
         }
       }
 

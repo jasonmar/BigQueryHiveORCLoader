@@ -177,7 +177,7 @@ class ORCSpec extends FlatSpec with BeforeAndAfterAll {
 
   //TODO P3 checking existing partition
   it should "query partitions from External Catalog" in {
-    val metaStore = MetaStore.ExternalCatalog(getSpark)
+    val metaStore = MetaStore.ExternalCatalogMetaStore(getSpark)
     val table = metaStore.getTable(DBName, TableName)
     val parts = metaStore.filterPartitions(DBName, TableName, "region IN (EU,US) and date >= 2019-04-11 AND date <= 2019-04-12 ")
     assert(table.partitionColumnNames == Seq("region","date"))
@@ -185,7 +185,7 @@ class ORCSpec extends FlatSpec with BeforeAndAfterAll {
   }
 
   it should "query partitions from Spark SQL" in {
-    val metaStore = MetaStore.SparkSQL(getSpark)
+    val metaStore = MetaStore.SparkSQLMetaStore(getSpark)
     val table = metaStore.getTable(DBName, TableName)
     val parts = metaStore.filterPartitions(DBName, TableName, "region=EU and date=2019-04-11")
     assert(table.partitionColumnNames == Seq("region","date"))

@@ -20,7 +20,7 @@ import java.io.ByteArrayInputStream
 import java.nio.file.{Files, Paths}
 
 import com.google.auth.oauth2.GoogleCredentials
-import com.google.cloud.bigquery.{BigQuery, BigQueryOptions, Clustering, StandardTableDefinition, TableId, TableInfo, TimePartitioning}
+import com.google.cloud.bigquery._
 import com.google.cloud.storage.{Storage, StorageOptions}
 import com.google.example.BQHiveLoader.{BigQueryScope, Config, StorageScope}
 import com.google.example.ExternalTableManager.Orc
@@ -32,15 +32,25 @@ object SparkJobs {
     (it: Iterator[Config]) => loadPartitions(it.next, table, partitions)
 
   def loadPartitions(c: Config, table: TableMetadata, partitions: Seq[Partition]): Unit = {
-    // TODO add another credential for bigquery writes
-    val creds: GoogleCredentials = c.bqKeyFile match {
-      case Some(f) =>
-        GoogleCredentials
-          .fromStream(new ByteArrayInputStream(Files.readAllBytes(Paths.get(f))))
-          .createScoped(BigQueryScope)
-      case _ =>
-        GoogleCredentials.getApplicationDefault
-    }
+    val bqCreateCredentials: GoogleCredentials =
+      c.bqCreateTableKeyFile.orElse(c.bqKeyFile) match {
+        case Some(f) =>
+          GoogleCredentials
+            .fromStream(new ByteArrayInputStream(Files.readAllBytes(Paths.get(f))))
+            .createScoped(BigQueryScope)
+        case _ =>
+          GoogleCredentials.getApplicationDefault
+      }
+
+    val bqWriteCredentials: GoogleCredentials =
+      c.bqWriteKeyFile.orElse(c.bqKeyFile) match {
+        case Some(f) =>
+          GoogleCredentials
+            .fromStream(new ByteArrayInputStream(Files.readAllBytes(Paths.get(f))))
+            .createScoped(BigQueryScope)
+        case _ =>
+          GoogleCredentials.getApplicationDefault
+      }
 
     val storageCreds: GoogleCredentials = c.gcsKeyFile match {
       case Some(f) =>
@@ -51,7 +61,14 @@ object SparkJobs {
 
     val bigquery: BigQuery = BigQueryOptions.newBuilder()
       .setLocation(c.bqLocation)
-      .setCredentials(creds)
+      .setCredentials(bqCreateCredentials)
+      .setProjectId(c.bqProject)
+      .build()
+      .getService
+
+    val bigqueryWrite: BigQuery = BigQueryOptions.newBuilder()
+      .setLocation(c.bqLocation)
+      .setCredentials(bqWriteCredentials)
       .setProjectId(c.bqProject)
       .build()
       .getService
@@ -73,10 +90,10 @@ object SparkJobs {
     if (!destTableExists) {
       require(c.clusterColumns.nonEmpty, "destination table does not exist, clusterColumns must not be empty")
       require(c.partitionColumn.nonEmpty, "destination table does not exist, partitionColumn must not be empty")
-      val destTableSchema = if (c.partitionColumn.nonEmpty) {
-        Mapping.convertStructType(table.schema)
+      val destTableSchema = if (c.partitionColumn.map(_.toLowerCase).contains("none")) {
+        Mapping.convertStructType(table.schema.add(c.unusedColumnName, DateType))
       } else {
-        Mapping.convertStructType(table.schema.add("unused", DateType))
+        Mapping.convertStructType(table.schema)
       }
 
       val destTableDefBuilder = StandardTableDefinition.newBuilder()
@@ -85,7 +102,7 @@ object SparkJobs {
         .setTimePartitioning(TimePartitioning.newBuilder(TimePartitioning.Type.DAY)
           .setField(c.partitionColumn.map(_.toLowerCase)
             .filterNot(_ == "none")
-            .getOrElse("unused"))
+            .getOrElse(c.unusedColumnName))
           .build())
 
       if (c.clusterColumns.map(_.toLowerCase) != Seq("none")) {
@@ -103,8 +120,13 @@ object SparkJobs {
                                    tableName = c.bqTable,
                                    tableMetadata = table,
                                    partitions = partitions,
+                                   unusedColumnName = c.unusedColumnName,
+                                   partColFormats = c.partColFormats.toMap,
                                    storageFormat = storageFormat,
-                                   bigquery = bigquery,
+                                   bigqueryCreate = bigquery,
+                                   bigqueryWrite = bigqueryWrite,
+                                   overwrite = c.bqOverwrite,
+                                   batch = c.bqBatch,
                                    gcs = gcs)
   }
 }

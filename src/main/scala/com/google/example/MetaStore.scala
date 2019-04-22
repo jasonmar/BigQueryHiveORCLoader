@@ -16,15 +16,15 @@
 
 package com.google.example
 
-import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 object MetaStore {
   case class TableMetadata(schema: StructType, partitionColumnNames: Seq[String])
 
   case class Partition(values: Seq[(String,String)], location: String)
 
-  trait PartitionProvider {
+  trait MetaStore {
     def filterPartitions(db: String, table: String, filterExpression: String): Seq[Partition] = {
       PartitionFilters.parse(filterExpression) match {
         case Some(filter) =>
@@ -37,7 +37,7 @@ object MetaStore {
     def getTable(db: String, table: String): TableMetadata
   }
 
-  case class ExternalCatalog(spark: SparkSession) extends PartitionProvider {
+  case class ExternalCatalogMetaStore(spark: SparkSession) extends MetaStore {
     private val cat = spark.sessionState.catalog.externalCatalog
 
     override def listPartitions(db: String, table: String): Seq[Partition] = {
@@ -117,7 +117,7 @@ object MetaStore {
     TableMetadata(schema, partColNames)
   }
 
-  case class SparkSQL(spark: SparkSession) extends PartitionProvider {
+  case class SparkSQLMetaStore(spark: SparkSession) extends MetaStore {
     override def listPartitions(db: String, table: String): Seq[Partition] = {
       parsePartitionTable(spark.sql(s"show partitions $table"))
         .map{partValues =>
@@ -131,7 +131,7 @@ object MetaStore {
       parseTableDesc(spark.sql(s"describe formatted $table"))
   }
 
-  case class JDBC(jdbcUrl: String, spark: SparkSession) extends PartitionProvider {
+  case class JDBCMetaStore(jdbcUrl: String, spark: SparkSession) extends MetaStore {
     def sql(query: String): DataFrame = {
       spark.read.format("jdbc")
         .option("url", jdbcUrl)

@@ -16,8 +16,7 @@
 
 package com.google.example
 
-import com.google.example.ExternalTableManager.{Orc, StorageFormat}
-import com.google.example.MetaStore.{JDBC, Partition, SparkSQL}
+import com.google.example.MetaStore.{ExternalCatalogMetaStore, JDBCMetaStore, Partition, SparkSQLMetaStore}
 import org.apache.spark.sql.SparkSession
 
 object BQHiveLoader {
@@ -32,9 +31,14 @@ object BQHiveLoader {
                     bqDataset: String = "",
                     bqTable: String = "",
                     bqLocation: String = "US",
+                    bqOverwrite: Boolean = false,
+                    bqBatch: Boolean = true,
                     bqKeyFile: Option[String] = None,
                     bqCreateTableKeyFile: Option[String] = None,
                     bqWriteKeyFile: Option[String] = None,
+                    unusedColumnName: String = "unused",
+                    metastoreType: String = "jdbc",
+                    partColFormats: Seq[(String,String)] = Seq.empty,
                     storageFormat: Option[String] = None,
                     gcsKeyFile: Option[String] = None,
                     krbKeyTab: Option[String] = None,
@@ -104,6 +108,18 @@ object BQHiveLoader {
         .action{(x, c) => c.copy(bqLocation = x)}
         .text("BigQuery Location (default: US)")
 
+      opt[String]("metastoreType")
+        .action{(x, c) => c.copy(metastoreType = x)}
+        .text("Metastore type (default: jdbc)")
+
+      opt[Boolean]( "bqOverwrite")
+        .action{(x, c) => c.copy(bqOverwrite = x)}
+        .text("BigQuery overwrite flag (default: false)")
+
+      opt[Boolean]( "bqBatch")
+        .action{(x, c) => c.copy(bqBatch = x)}
+        .text("BigQuery batch mode flag (default: true)")
+
       opt[String]("storageFormat")
         .action{(x, c) => c.copy(storageFormat = Option(x))}
         .text("Storage Format (default: orc)")
@@ -112,6 +128,10 @@ object BQHiveLoader {
             failure(s"unrecognized storage format '$s'")
           else success
         }
+
+      opt[Map[String,String]]("partColFormats")
+        .action{(x, c) => c.copy(partColFormats = x.toSeq)}
+        .text("Partition Column Formats (example: 'month,YYYYMM')")
 
       opt[String]("keyTab")
         .action{(x, c) => c.copy(krbKeyTab = Option(x))}
@@ -169,9 +189,18 @@ object BQHiveLoader {
   }
 
   def run(config: Config, spark: SparkSession): Unit = {
-    //val metaStore = ExternalCatalog(spark)
-    //val metaStore = SparkSQL(spark)
-    val metaStore = JDBC(config.jdbcUrl, spark)
+    val metaStore = {
+      config.metastoreType match {
+        case "jdbc" =>
+          JDBCMetaStore(config.jdbcUrl, spark)
+        case "sql" =>
+          SparkSQLMetaStore(spark)
+        case "external" =>
+          ExternalCatalogMetaStore(spark)
+        case x =>
+          throw new IllegalArgumentException(s"unsupported metastore type '$x'")
+      }
+    }
     val table = metaStore.getTable(config.hiveDbName, config.hiveTableName)
     val partitions: Seq[Partition] = metaStore.filterPartitions(config.hiveDbName, config.hiveTableName, config.partFilters)
 
