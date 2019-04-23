@@ -22,13 +22,14 @@ import java.nio.file.{Files, Paths}
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.bigquery._
 import com.google.cloud.storage.{Storage, StorageOptions}
-import com.google.example.BQHiveLoader.{BigQueryScope, Config, StorageScope}
 import com.google.example.ExternalTableManager.Orc
-import com.google.example.MetaStore.{ExternalCatalogMetaStore, JDBCMetaStore, Partition, SparkSQLMetaStore, TableMetadata}
+import com.google.example.MetaStore._
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.types.DateType
 
 object SparkJobs {
+  val BigQueryScope = "https://www.googleapis.com/auth/bigquery"
+  val StorageScope = "https://www.googleapis.com/auth/devstorage.read_write"
+
   def run(config: Config): Unit = {
     val spark = SparkSession
       .builder()
@@ -90,7 +91,7 @@ object SparkJobs {
         GoogleCredentials.getApplicationDefault
     }
 
-    val bigquery: BigQuery = BigQueryOptions.newBuilder()
+    val bigqueryCreate: BigQuery = BigQueryOptions.newBuilder()
       .setLocation(c.bqLocation)
       .setCredentials(bqCreateCredentials)
       .setProjectId(c.bqProject)
@@ -115,35 +116,9 @@ object SparkJobs {
         .map(ExternalTableManager.parseStorageFormat)
         .getOrElse(Orc)
 
-    import scala.collection.JavaConverters._
     val destTableId = TableId.of(c.bqProject, c.bqDataset, c.bqTable)
-    val destTableExists = bigquery.getTable(destTableId).exists()
-    if (!destTableExists) {
-      require(c.clusterColumns.nonEmpty, "destination table does not exist, clusterColumns must not be empty")
-      require(c.partitionColumn.nonEmpty, "destination table does not exist, partitionColumn must not be empty")
-      val destTableSchema = if (c.partitionColumn.map(_.toLowerCase).contains("none")) {
-        Mapping.convertStructType(table.schema.add(c.unusedColumnName, DateType))
-      } else {
-        Mapping.convertStructType(table.schema)
-      }
-
-      val destTableDefBuilder = StandardTableDefinition.newBuilder()
-        .setLocation(c.bqLocation)
-        .setSchema(destTableSchema)
-        .setTimePartitioning(TimePartitioning.newBuilder(TimePartitioning.Type.DAY)
-          .setField(c.partitionColumn.map(_.toLowerCase)
-            .filterNot(_ == "none")
-            .getOrElse(c.unusedColumnName))
-          .build())
-
-      if (c.clusterColumns.map(_.toLowerCase) != Seq("none")) {
-        destTableDefBuilder.setClustering(Clustering.newBuilder()
-          .setFields(c.clusterColumns.map(_.toLowerCase).asJava).build())
-      }
-
-      val tableInfo = TableInfo.newBuilder(destTableId, destTableDefBuilder.build())
-        .build()
-      bigquery.create(tableInfo)
+    if (!bigqueryCreate.getTable(destTableId).exists()) {
+      NativeTableManager.createTable(c, table.schema, destTableId, bigqueryWrite)
     }
 
     ExternalTableManager.loadParts(project = c.bqProject,
@@ -154,7 +129,7 @@ object SparkJobs {
                                    unusedColumnName = c.unusedColumnName,
                                    partColFormats = c.partColFormats.toMap,
                                    storageFormat = storageFormat,
-                                   bigqueryCreate = bigquery,
+                                   bigqueryCreate = bigqueryCreate,
                                    bigqueryWrite = bigqueryWrite,
                                    overwrite = c.bqOverwrite,
                                    batch = c.bqBatch,

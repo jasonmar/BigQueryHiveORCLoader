@@ -17,7 +17,8 @@
 package com.google.example
 
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
-import com.google.cloud.bigquery.{BigQuery, QueryJobConfiguration, TableId, TableResult}
+import com.google.cloud.bigquery._
+import org.apache.spark.sql.types.{DateType, StructType}
 
 object NativeTableManager {
   def getExistingPartitions(tableId: TableId, bigQuery: BigQuery): TableResult = {
@@ -31,5 +32,34 @@ object NativeTableManager {
       .setUseLegacySql(true)
       .setPriority(Priority.INTERACTIVE)
       .build())
+  }
+
+  def createTable(c: Config, schema: StructType, destTableId: TableId, bigquery: BigQuery) ={
+    require(c.clusterColumns.nonEmpty, "destination table does not exist, clusterColumns must not be empty")
+    require(c.partitionColumn.nonEmpty, "destination table does not exist, partitionColumn must not be empty")
+    val destTableSchema = if (c.partitionColumn.map(_.toLowerCase).contains("none")) {
+      Mapping.convertStructType(schema.add(c.unusedColumnName, DateType))
+    } else {
+      Mapping.convertStructType(schema)
+    }
+
+    val destTableDefBuilder = StandardTableDefinition.newBuilder()
+      .setLocation(c.bqLocation)
+      .setSchema(destTableSchema)
+      .setTimePartitioning(TimePartitioning.newBuilder(TimePartitioning.Type.DAY)
+        .setField(c.partitionColumn.map(_.toLowerCase)
+          .filterNot(_ == "none")
+          .getOrElse(c.unusedColumnName))
+        .build())
+
+    if (c.clusterColumns.map(_.toLowerCase) != Seq("none")) {
+      import scala.collection.JavaConverters.seqAsJavaListConverter
+      destTableDefBuilder.setClustering(Clustering.newBuilder()
+        .setFields(c.clusterColumns.map(_.toLowerCase).asJava).build())
+    }
+
+    val tableInfo = TableInfo.newBuilder(destTableId, destTableDefBuilder.build())
+      .build()
+    bigquery.create(tableInfo)
   }
 }
