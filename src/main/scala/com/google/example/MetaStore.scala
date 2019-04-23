@@ -133,7 +133,7 @@ object MetaStore {
     def sql(query: String): DataFrame = {
       spark.read.format("jdbc")
         .option("url", jdbcUrl)
-        .option("query", query)
+        .option("dbtable", query)
         .option("driver", "org.apache.hive.jdbc.HiveDriver")
         .option("numPartitions","1")
         .option("queryTimeout","15")
