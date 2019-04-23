@@ -95,15 +95,15 @@ case class JDBCMetaStore(jdbcUrl: String, spark: SparkSession) extends MetaStore
     JDBCMetaStore.query(query, con, spark)
 
   override def listPartitions(db: String, table: String): Seq[Partition] = {
-    parsePartitionTable(sql(s"show partitions $table"))
+    parsePartitionTable(sql(s"show partitions $db.$table"))
       .map{partValues =>
         val partSpec = mkPartSpec(partValues)
-        val df = sql(s"describe formatted $table partition($partSpec)")
+        val df = sql(s"describe formatted $db.$table partition($partSpec)")
         parsePartitionDesc(partValues, df)
       }
   }
 
   override def getTable(db: String, table: String): TableMetadata = {
-    parseTableDesc(sql(s"describe formatted $table"))
+    parseTableDesc(sql(s"describe formatted $db.$table"))
   }
 }
