@@ -36,10 +36,7 @@ object SparkJobs {
       .appName("BQHiveORCLoader")
       .enableHiveSupport
       .getOrCreate()
-    run(config, spark)
-  }
 
-  def run(config: Config, spark: SparkSession): Unit = {
     val metaStore = {
       config.hiveMetastoreType match {
         case "jdbc" =>
@@ -52,12 +49,17 @@ object SparkJobs {
           throw new IllegalArgumentException(s"unsupported metastore type '$x'")
       }
     }
+
+    runWithMetaStore(config, metaStore, spark)
+  }
+
+  def runWithMetaStore(config: Config, metaStore: MetaStore, spark: SparkSession): Unit = {
     val table = metaStore.getTable(config.hiveDbName, config.hiveTableName)
     val partitions: Seq[Partition] = metaStore.filterPartitions(config.hiveDbName, config.hiveTableName, config.partFilters)
 
     val sc = spark.sparkContext
-    sc.runJob(rdd = sc.makeRDD(Seq(config),1),
-      func = SparkJobs.loadPartitionsJob(table, partitions))
+    sc.runJob(rdd = sc.makeRDD(Seq(config), numSlices = 1),
+              func = loadPartitionsJob(table, partitions))
   }
 
   def loadPartitionsJob(table: TableMetadata, partitions: Seq[Partition]): Iterator[Config] => Unit =
