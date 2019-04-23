@@ -24,10 +24,41 @@ import com.google.cloud.bigquery._
 import com.google.cloud.storage.{Storage, StorageOptions}
 import com.google.example.BQHiveLoader.{BigQueryScope, Config, StorageScope}
 import com.google.example.ExternalTableManager.Orc
-import com.google.example.MetaStore.{Partition, TableMetadata}
+import com.google.example.MetaStore.{ExternalCatalogMetaStore, JDBCMetaStore, Partition, SparkSQLMetaStore, TableMetadata}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.DateType
 
 object SparkJobs {
+  def run(config: Config): Unit = {
+    val spark = SparkSession
+      .builder()
+      .appName("BQHiveORCLoader")
+      .enableHiveSupport
+      .getOrCreate()
+    run(config, spark)
+  }
+
+  def run(config: Config, spark: SparkSession): Unit = {
+    val metaStore = {
+      config.hiveMetastoreType match {
+        case "jdbc" =>
+          JDBCMetaStore(config.hiveJdbcUrl, spark)
+        case "sql" =>
+          SparkSQLMetaStore(spark)
+        case "external" =>
+          ExternalCatalogMetaStore(spark)
+        case x =>
+          throw new IllegalArgumentException(s"unsupported metastore type '$x'")
+      }
+    }
+    val table = metaStore.getTable(config.hiveDbName, config.hiveTableName)
+    val partitions: Seq[Partition] = metaStore.filterPartitions(config.hiveDbName, config.hiveTableName, config.partFilters)
+
+    val sc = spark.sparkContext
+    sc.runJob(rdd = sc.makeRDD(Seq(config),1),
+      func = SparkJobs.loadPartitionsJob(table, partitions))
+  }
+
   def loadPartitionsJob(table: TableMetadata, partitions: Seq[Partition]): Iterator[Config] => Unit =
     (it: Iterator[Config]) => loadPartitions(it.next, table, partitions)
 

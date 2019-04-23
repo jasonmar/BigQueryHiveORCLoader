@@ -16,8 +16,6 @@
 
 package com.google.example
 
-import com.google.example.MetaStore.{ExternalCatalogMetaStore, JDBCMetaStore, Partition, SparkSQLMetaStore}
-import org.apache.spark.sql.SparkSession
 
 object BQHiveLoader {
   val BigQueryScope = "https://www.googleapis.com/auth/bigquery"
@@ -54,11 +52,11 @@ object BQHiveLoader {
 
       opt[String]("partFilters")
         .action{(x, c) => c.copy(partFilters = x)}
-        .text("partition filters specified as date > 2019-04-18 AND region IN A,B,C AND part = *")
+        .text("Partition filter expression specified as date > 2019-04-18 AND region IN (A,B,C) AND part = *")
 
-      opt[String]('c', "partitionColumn")
+      opt[String]("partitionColumn")
         .action{(x, c) => c.copy(partitionColumn = Option(x))}
-        .text("name of partition column")
+        .text("Partition column name")
 
       opt[Seq[String]]("clusterCols")
         .action{(x, c) => c.copy(clusterColumns = x)}
@@ -72,46 +70,55 @@ object BQHiveLoader {
         .action{(x, c) => c.copy(hiveJdbcUrl = x)}
         .text("Hive JDBC URL")
 
-      opt[String]('h', "hiveDbName")
+      opt[String]("hiveDbName")
         .required()
         .action{(x, c) => c.copy(hiveDbName = x)}
-        .text("source Hive database name")
+        .text("Hive source database name")
 
-      opt[String]('s', "hiveTableName")
+      opt[String]("hiveTableName")
         .required()
         .action{(x, c) => c.copy(hiveTableName = x)}
-        .text("source Hive table name")
+        .text("Hive source table name")
 
-      opt[String]("bqKeyFile")
-        .action{(x, c) => c.copy(bqKeyFile = Option(x))}
-        .text("path to keyfile for BigQuery")
+      opt[String]("hiveMetastoreType")
+        .action{(x, c) => c.copy(hiveMetastoreType = x)}
+        .text("Hive Metastore type (default: jdbc)")
 
-      opt[String]("bqCreateTableKeyFile")
-        .action{(x, c) => c.copy(bqCreateTableKeyFile = Option(x))}
-        .text("path to keyfile for BigQuery external table creation")
-
-      opt[String]("bqWriteKeyFile")
-        .action{(x, c) => c.copy(bqWriteKeyFile = Option(x))}
-        .text("path to keyfile for BigQuery writes")
-
-      opt[String]("gcsKeyFile")
-        .action{(x, c) => c.copy(gcsKeyFile = Option(x))}
-        .text("path to keyfile for GCS")
+      opt[String]("hiveStorageFormat")
+        .action{(x, c) => c.copy(hiveStorageFormat = Option(x))}
+        .text("Hive storage format (default: orc)")
+        .validate{s =>
+          if (!Set("orc", "parquet", "avro").contains(s.toLowerCase))
+            failure(s"unrecognized storage format '$s'")
+          else success
+        }
 
       opt[String]("bqProject")
         .required()
         .action{(x, c) => c.copy(bqProject = x)}
-        .text("destination BigQuery project")
+        .text("BigQuery destination project")
 
       opt[String]("bqDataset")
         .required()
         .action{(x, c) => c.copy(bqDataset = x)}
-        .text("destination BigQuery dataset")
+        .text("BigQuery destination dataset")
 
       opt[String]("bqTable")
         .required()
         .action{(x, c) => c.copy(bqTable = x)}
-        .text("destination BigQuery table")
+        .text("BigQuery destination table")
+
+      opt[String]("bqKeyFile")
+        .action{(x, c) => c.copy(bqKeyFile = Option(x))}
+        .text("BigQuery keyfile path")
+
+      opt[String]("bqCreateTableKeyFile")
+        .action{(x, c) => c.copy(bqCreateTableKeyFile = Option(x))}
+        .text("BigQuery keyfile path for external table creation")
+
+      opt[String]("bqWriteKeyFile")
+        .action{(x, c) => c.copy(bqWriteKeyFile = Option(x))}
+        .text("BigQuery keyfile path for write to destination table")
 
       opt[String]("bqLocation")
         .action{(x, c) => c.copy(bqLocation = x)}
@@ -125,28 +132,19 @@ object BQHiveLoader {
         .action{(x, c) => c.copy(bqBatch = x)}
         .text("BigQuery batch mode flag (default: true)")
 
-      opt[String]("hiveMetastoreType")
-        .action{(x, c) => c.copy(hiveMetastoreType = x)}
-        .text("Metastore type (default: jdbc)")
+      opt[String]("gcsKeyFile")
+        .action{(x, c) => c.copy(gcsKeyFile = Option(x))}
+        .text("GCS keyfile path for object listing")
 
-      opt[String]("hiveStorageFormat")
-        .action{(x, c) => c.copy(hiveStorageFormat = Option(x))}
-        .text("Storage Format (default: orc)")
-        .validate{s =>
-          if (!Set("orc", "parquet", "avro").contains(s.toLowerCase))
-            failure(s"unrecognized storage format '$s'")
-          else success
-        }
-
-      opt[String]("keyTab")
+      opt[String]("krbKeyTab")
         .action{(x, c) => c.copy(krbKeyTab = Option(x))}
         .text("Kerberos keytab location (path/to/krb5.keytab)")
 
-      opt[String]("principal")
+      opt[String]("krbPrincipal")
         .action{(x, c) => c.copy(krbPrincipal = Option(x))}
         .text("Kerberos user principal (user/host.example.com@EXAMPLE.COM)")
 
-      opt[String]("serviceName")
+      opt[String]("krbServiceName")
         .action{(x, c) => c.copy(krbServiceName = Option(x))}
         .text("Kerberos service name")
 
@@ -179,13 +177,7 @@ object BQHiveLoader {
           Kerberos.configureJaas("BQHiveLoader", keytab, principal, serviceName)
         }
 
-        val spark = SparkSession
-          .builder()
-          .appName("BQHiveORCLoader")
-          .enableHiveSupport
-          .getOrCreate()
-
-        run(config, spark)
+        SparkJobs.run(config)
 
       case _ =>
         System.err.println("Invalid args")
@@ -193,24 +185,4 @@ object BQHiveLoader {
     }
   }
 
-  def run(config: Config, spark: SparkSession): Unit = {
-    val metaStore = {
-      config.hiveMetastoreType match {
-        case "jdbc" =>
-          JDBCMetaStore(config.hiveJdbcUrl, spark)
-        case "sql" =>
-          SparkSQLMetaStore(spark)
-        case "external" =>
-          ExternalCatalogMetaStore(spark)
-        case x =>
-          throw new IllegalArgumentException(s"unsupported metastore type '$x'")
-      }
-    }
-    val table = metaStore.getTable(config.hiveDbName, config.hiveTableName)
-    val partitions: Seq[Partition] = metaStore.filterPartitions(config.hiveDbName, config.hiveTableName, config.partFilters)
-
-    val sc = spark.sparkContext
-    sc.runJob(rdd = sc.makeRDD(Seq(config),1),
-      func = SparkJobs.loadPartitionsJob(table, partitions))
-  }
 }
