@@ -128,29 +128,4 @@ object MetaStore {
     override def getTable(db: String, table: String): TableMetadata =
       parseTableDesc(spark.sql(s"describe formatted $table"))
   }
-
-  case class JDBCMetaStore(jdbcUrl: String, spark: SparkSession) extends MetaStore {
-    def sql(query: String): DataFrame = {
-      spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("dbtable", s"($query) as q")
-        .option("driver", "org.apache.hive.jdbc.HiveDriver")
-        .option("numPartitions","1")
-        .option("queryTimeout","15")
-        .load()
-    }
-
-    override def listPartitions(db: String, table: String): Seq[Partition] = {
-      parsePartitionTable(sql(s"show partitions $table"))
-        .map{partValues =>
-          val partSpec = mkPartSpec(partValues)
-          val df = sql(s"describe formatted $table partition($partSpec)")
-          parsePartitionDesc(partValues, df)
-        }
-    }
-
-    override def getTable(db: String, table: String): TableMetadata = {
-      parseTableDesc(sql(s"describe formatted $table"))
-    }
-  }
 }
