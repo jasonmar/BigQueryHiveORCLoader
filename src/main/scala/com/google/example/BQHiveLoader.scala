@@ -51,6 +51,10 @@ object BQHiveLoader {
     new scopt.OptionParser[Config]("BQHiveLoader") {
       head("BQHiveLoader", "0.1")
 
+      opt[String]("jdbcUrl")
+        .action{(x, c) => c.copy(jdbcUrl = x)}
+        .text("Hive JDBC URL")
+
       opt[String]('h', "hiveDbName")
         .required()
         .action{(x, c) => c.copy(hiveDbName = x)}

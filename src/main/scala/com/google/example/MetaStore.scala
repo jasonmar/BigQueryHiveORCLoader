@@ -41,11 +41,9 @@ object MetaStore {
     private val cat = spark.sessionState.catalog.externalCatalog
 
     override def listPartitions(db: String, table: String): Seq[Partition] = {
-      val colNames = getTable(db, table).partitionColumnNames
       cat.listPartitions(db, table)
         .map{part =>
-          val values = colNames.zip(part.spec.values)
-          Partition(values, part.location.toString)
+          Partition(part.spec.toSeq, part.location.toString)
         }
     }
 
