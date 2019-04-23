@@ -23,10 +23,16 @@ object BQHiveLoader {
   val BigQueryScope = "https://www.googleapis.com/auth/bigquery"
   val StorageScope = "https://www.googleapis.com/auth/devstorage.read_write"
 
-  case class Config(hiveDbName: String = "",
-                    hiveTableName: String = "",
-                    clusterColumns: Seq[String]= Seq.empty,
+  case class Config(partFilters: String = "",
                     partitionColumn: Option[String] = None,
+                    clusterColumns: Seq[String]= Seq.empty,
+                    partColFormats: Seq[(String,String)] = Seq.empty,
+                    unusedColumnName: String = "unused",
+                    hiveDbName: String = "",
+                    hiveTableName: String = "",
+                    hiveMetastoreType: String = "jdbc",
+                    hiveJdbcUrl: String = "",
+                    hiveStorageFormat: Option[String] = None,
                     bqProject: String = "",
                     bqDataset: String = "",
                     bqTable: String = "",
@@ -36,23 +42,34 @@ object BQHiveLoader {
                     bqKeyFile: Option[String] = None,
                     bqCreateTableKeyFile: Option[String] = None,
                     bqWriteKeyFile: Option[String] = None,
-                    unusedColumnName: String = "unused",
-                    metastoreType: String = "jdbc",
-                    partColFormats: Seq[(String,String)] = Seq.empty,
-                    storageFormat: Option[String] = None,
                     gcsKeyFile: Option[String] = None,
                     krbKeyTab: Option[String] = None,
                     krbPrincipal: Option[String] = None,
-                    krbServiceName: Option[String] = Option("bqhiveorcloader"),
-                    partFilters: String = "",
-                    jdbcUrl: String = "")
+                    krbServiceName: Option[String] = Option("bqhiveorcloader")
+  )
 
   val Parser: scopt.OptionParser[Config] =
     new scopt.OptionParser[Config]("BQHiveLoader") {
       head("BQHiveLoader", "0.1")
 
-      opt[String]("jdbcUrl")
-        .action{(x, c) => c.copy(jdbcUrl = x)}
+      opt[String]("partFilters")
+        .action{(x, c) => c.copy(partFilters = x)}
+        .text("partition filters specified as date > 2019-04-18 AND region IN A,B,C AND part = *")
+
+      opt[String]('c', "partitionColumn")
+        .action{(x, c) => c.copy(partitionColumn = Option(x))}
+        .text("name of partition column")
+
+      opt[Seq[String]]("clusterCols")
+        .action{(x, c) => c.copy(clusterColumns = x)}
+        .text("Cluster columns if creating BigQuery table")
+
+      opt[Map[String,String]]("partColFormats")
+        .action{(x, c) => c.copy(partColFormats = x.toSeq)}
+        .text("Partition Column Formats (example: 'month,YYYYMM')")
+
+      opt[String]("hiveJdbcUrl")
+        .action{(x, c) => c.copy(hiveJdbcUrl = x)}
         .text("Hive JDBC URL")
 
       opt[String]('h', "hiveDbName")
@@ -64,14 +81,6 @@ object BQHiveLoader {
         .required()
         .action{(x, c) => c.copy(hiveTableName = x)}
         .text("source Hive table name")
-
-      opt[String]('c', "partitionColumn")
-        .action{(x, c) => c.copy(partitionColumn = Option(x))}
-        .text("name of partition column")
-
-      opt[Seq[String]]("clusterCols")
-        .action{(x, c) => c.copy(clusterColumns = x)}
-        .text("Cluster columns if creating BigQuery table")
 
       opt[String]("bqKeyFile")
         .action{(x, c) => c.copy(bqKeyFile = Option(x))}
@@ -89,32 +98,24 @@ object BQHiveLoader {
         .action{(x, c) => c.copy(gcsKeyFile = Option(x))}
         .text("path to keyfile for GCS")
 
-      opt[String]('p', "project")
+      opt[String]("bqProject")
         .required()
         .action{(x, c) => c.copy(bqProject = x)}
         .text("destination BigQuery project")
 
-      opt[String]('b',"dataset")
+      opt[String]("bqDataset")
         .required()
         .action{(x, c) => c.copy(bqDataset = x)}
         .text("destination BigQuery dataset")
 
-      opt[String]('d',"table")
+      opt[String]("bqTable")
         .required()
         .action{(x, c) => c.copy(bqTable = x)}
         .text("destination BigQuery table")
 
-      opt[String]('w', "partFilters")
-        .action{(x, c) => c.copy(partFilters = x)}
-        .text("partition filters specified as date > 2019-04-18 AND region IN A,B,C AND part = *")
-
-      opt[String]('l', "bqLocation")
+      opt[String]("bqLocation")
         .action{(x, c) => c.copy(bqLocation = x)}
         .text("BigQuery Location (default: US)")
-
-      opt[String]("metastoreType")
-        .action{(x, c) => c.copy(metastoreType = x)}
-        .text("Metastore type (default: jdbc)")
 
       opt[Boolean]( "bqOverwrite")
         .action{(x, c) => c.copy(bqOverwrite = x)}
@@ -124,8 +125,12 @@ object BQHiveLoader {
         .action{(x, c) => c.copy(bqBatch = x)}
         .text("BigQuery batch mode flag (default: true)")
 
-      opt[String]("storageFormat")
-        .action{(x, c) => c.copy(storageFormat = Option(x))}
+      opt[String]("hiveMetastoreType")
+        .action{(x, c) => c.copy(hiveMetastoreType = x)}
+        .text("Metastore type (default: jdbc)")
+
+      opt[String]("hiveStorageFormat")
+        .action{(x, c) => c.copy(hiveStorageFormat = Option(x))}
         .text("Storage Format (default: orc)")
         .validate{s =>
           if (!Set("orc", "parquet", "avro").contains(s.toLowerCase))
@@ -133,9 +138,6 @@ object BQHiveLoader {
           else success
         }
 
-      opt[Map[String,String]]("partColFormats")
-        .action{(x, c) => c.copy(partColFormats = x.toSeq)}
-        .text("Partition Column Formats (example: 'month,YYYYMM')")
 
       opt[String]("keyTab")
         .action{(x, c) => c.copy(krbKeyTab = Option(x))}
@@ -194,9 +196,9 @@ object BQHiveLoader {
 
   def run(config: Config, spark: SparkSession): Unit = {
     val metaStore = {
-      config.metastoreType match {
+      config.hiveMetastoreType match {
         case "jdbc" =>
-          JDBCMetaStore(config.jdbcUrl, spark)
+          JDBCMetaStore(config.hiveJdbcUrl, spark)
         case "sql" =>
           SparkSQLMetaStore(spark)
         case "external" =>

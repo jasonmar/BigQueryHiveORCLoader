@@ -80,7 +80,7 @@ object SparkJobs {
       .getService
 
     // TODO detect from metadata
-    val storageFormat = c.storageFormat
+    val storageFormat = c.hiveStorageFormat
         .map(ExternalTableManager.parseStorageFormat)
         .getOrElse(Orc)
 
