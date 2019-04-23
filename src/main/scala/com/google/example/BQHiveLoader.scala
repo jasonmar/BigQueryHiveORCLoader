@@ -138,7 +138,6 @@ object BQHiveLoader {
           else success
         }
 
-
       opt[String]("keyTab")
         .action{(x, c) => c.copy(krbKeyTab = Option(x))}
         .text("Kerberos keytab location (path/to/krb5.keytab)")
