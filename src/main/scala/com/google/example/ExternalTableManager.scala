@@ -116,11 +116,17 @@ object ExternalTableManager {
     }
 
     if (!hasDotFiles) {
-      Seq(s"gs://$bucket/$path/*")
+      if (path == "")
+        Seq(s"gs://$bucket/*")
+      else
+        Seq(s"gs://$bucket/$path/*")
     } else if (partPrefix) {
-      Seq(s"gs://$bucket/$path/part*")
+      if (path == "")
+        Seq(s"gs://$bucket/part*")
+      else Seq(s"gs://$bucket/$path/part*")
     } else if (numPrefix) {
-      Seq(s"gs://$bucket/$path/0*")
+      if (path == "") Seq(s"gs://$bucket/0*")
+      else Seq(s"gs://$bucket/$path/0*")
     } else {
       val locations = blobs.filterNot{obj =>
         val fileName = obj.getName.stripPrefix(prefix)
