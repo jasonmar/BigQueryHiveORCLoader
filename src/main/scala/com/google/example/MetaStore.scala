@@ -75,7 +75,7 @@ object MetaStore {
       }
   }
 
-  def parsePartitionDesc(partValues: Seq[(String,String)], df: DataFrame): Partition = {
+  def parsePartitionDesc(partValues: Seq[(String,String)], df: DataFrame): Option[Partition] = {
     val tuples = df.drop("comment")
       .collect()
       .map{row =>
@@ -86,9 +86,12 @@ object MetaStore {
     parsePartitionDetails(partValues, tuples)
   }
 
-  def parsePartitionDetails(partValues: Seq[(String,String)], data: Seq[(String,String)]): Partition = {
-    val location = data.filter(_._1 == "Location").head._2
-    Partition(partValues, location)
+  def parsePartitionDetails(partValues: Seq[(String,String)], data: Seq[(String,String)]): Option[Partition] = {
+    data.find(_._1 == "Location")
+      .map{x =>
+        val location = x._2
+        Partition(partValues, location)
+      }
   }
 
   def parseTableDesc(df: DataFrame): TableMetadata = {
@@ -118,7 +121,7 @@ object MetaStore {
   case class SparkSQLMetaStore(spark: SparkSession) extends MetaStore {
     override def listPartitions(db: String, table: String): Seq[Partition] = {
       parsePartitionTable(spark.sql(s"show partitions $table"))
-        .map{partValues =>
+        .flatMap{partValues =>
           val partSpec = mkPartSpec(partValues)
           val df = spark.sql(s"describe formatted $table partition($partSpec)")
           parsePartitionDesc(partValues, df)

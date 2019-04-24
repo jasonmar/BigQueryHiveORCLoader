@@ -59,6 +59,11 @@ object SparkJobs {
     val table = metaStore.getTable(config.hiveDbName, config.hiveTableName)
     val partitions: Seq[Partition] = metaStore.filterPartitions(config.hiveDbName, config.hiveTableName, config.partFilters)
 
+    System.out.println(s"found partitions: ${partitions.map(_.toString).mkString("\n")}")
+
+    if (partitions.isEmpty)
+      throw new RuntimeException(s"No partitions found with filter expression '${config.partFilters}'")
+
     val sc = spark.sparkContext
     sc.runJob(rdd = sc.makeRDD(Seq(config), numSlices = 1),
               func = loadPartitionsJob(table, partitions))
