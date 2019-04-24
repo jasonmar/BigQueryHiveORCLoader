@@ -84,10 +84,10 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
       """select
         |  'US' as region,
         |  '2019-04-11' as date,
-        |  id as id,
-        |  x as x,
-        |  y as y,
-        |  z as z
+        |  id,
+        |  x,
+        |  y,
+        |  z
         |from `project.dataset.table`""".stripMargin
     assert(generatedSql == expectedSql)
   }

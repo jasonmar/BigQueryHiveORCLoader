@@ -243,8 +243,7 @@ object ExternalTableManager {
                                       unusedColumnName: String,
                                       formats: Map[String,String] = Map.empty,
                                       renameOrcCols: Boolean = false): String = {
-    val fields = partition.values.map(_._1)
-
+    // Columns from partition values
     val partVals = partition.values
       .map{x =>
         val (colName, colValue) = x
@@ -262,11 +261,18 @@ object ExternalTableManager {
         }
       }
 
+    val partColNames: Set[String] = partition.values.map(_._1).toSet
+
+    // Columns from partition values
     val data = if (renameOrcCols) {
       // handle positional column naming
-      fields.zipWithIndex.map{x => s"_col${x._2} as ${x._1}"}
+      schema
+        .filterNot(x => partColNames.contains(x.name))
+        .zipWithIndex
+        .map{x => s"_col${x._2} as ${x._1.name}"}
     } else {
-      fields
+      schema.filterNot(field => partColNames.contains(field.name))
+        .map{x => s"${x.name}"}
     }
 
     val tableSpec = extTable.getProject + "." + extTable.getDataset + "." + extTable.getTable
