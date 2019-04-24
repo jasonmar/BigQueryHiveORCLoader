@@ -75,16 +75,23 @@ object ExternalTableManager {
     tableInfo
   }
 
-  def resolveLocations(part: Partition, gcs: Storage): Seq[String] = {
-    val bucket = part.location.stripPrefix("gs://").takeWhile(_ != '/')
-    val path = part.location.stripPrefix("gs://").dropWhile(_ != '/')
+  def resolveLocations(part: Partition, gcs: Storage): Seq[String] =
+    listObjects(part.location, gcs)
+
+  def listObjects(gsUri: String, gcs: Storage): Seq[String] = {
+    val bucket = gsUri.stripPrefix("gs://").takeWhile(_ != '/')
+    val path = gsUri.stripPrefix(s"gs://$bucket/").stripSuffix("/")
+    val prefix = s"$path/"
     val options = Seq(
-      Storage.BlobListOption.prefix(path+"/"),
+      Storage.BlobListOption.prefix(prefix),
       Storage.BlobListOption.fields(Storage.BlobField.NAME)
     )
     import scala.collection.JavaConverters.iterableAsScalaIterableConverter
     gcs.list(bucket, options:_*).iterateAll().asScala.toArray
-      .filterNot(_.getName.startsWith("."))
+      .filterNot{obj =>
+        val fileName = obj.getName.stripPrefix(prefix)
+        fileName.startsWith(".") || fileName.endsWith("/") || fileName.isEmpty
+      }
       .map{obj => s"gs://$bucket/${obj.getName}"}
   }
 
@@ -102,6 +109,10 @@ object ExternalTableManager {
     val partSchema = StructType(tableMetadata.schema.filterNot(x => partCols.contains(x.name)))
 
     val sources = resolveLocations(part, gcs)
+    if (sources.nonEmpty)
+      System.out.println(s"Creating external table with sources '${sources.mkString(", ")}'")
+    else
+      throw new RuntimeException(s"No sources found for ${part.location}")
 
     create(TableId.of(project, dataset, extTableName),
            schema = convertStructType(partSchema),
