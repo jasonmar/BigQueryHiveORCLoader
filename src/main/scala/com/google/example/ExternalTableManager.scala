@@ -16,6 +16,8 @@
 
 package com.google.example
 
+import java.sql.Blob
+
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
 import com.google.cloud.bigquery._
@@ -77,8 +79,9 @@ object ExternalTableManager {
     tableInfo
   }
 
-  def resolveLocations(part: Partition, gcs: Storage): Seq[String] =
+  def resolveLocations(part: Partition, gcs: Storage): Seq[String] ={
     listObjects(part.location, gcs)
+  }
 
   def listObjects(gsUri: String, gcs: Storage): Seq[String] = {
     val bucket = gsUri.stripPrefix("gs://").takeWhile(_ != '/')
@@ -89,12 +92,42 @@ object ExternalTableManager {
       Storage.BlobListOption.fields(Storage.BlobField.NAME)
     )
     import scala.collection.JavaConverters.iterableAsScalaIterableConverter
-    gcs.list(bucket, options:_*).iterateAll().asScala.toArray
+    val blobs = gcs.list(bucket, options:_*)
+      .iterateAll().asScala.toArray
       .filterNot{obj =>
         val fileName = obj.getName.stripPrefix(prefix)
         fileName.startsWith(".") || fileName.endsWith("/") || fileName.isEmpty
       }
-      .map{obj => s"gs://$bucket/${obj.getName}"}
+
+    val hasDotFiles = blobs.exists{obj =>
+      obj.getName.stripPrefix(prefix).startsWith(".")
+    }
+
+    val partPrefix = blobs.forall{obj =>
+      obj.getName.stripPrefix(prefix).startsWith("part")
+    }
+
+    val numPrefix = blobs.forall{obj =>
+      obj.getName.stripPrefix(prefix).startsWith("0")
+    }
+
+    if (!hasDotFiles) {
+      Seq(s"$path/*")
+    } else if (partPrefix) {
+      Seq(s"$path/part*")
+    } else if (numPrefix) {
+      Seq(s"$path/0*")
+    } else {
+      val locations = blobs.filterNot{obj =>
+        val fileName = obj.getName.stripPrefix(prefix)
+        fileName.startsWith(".") || fileName.endsWith("/") || fileName.isEmpty
+      }
+        .map{obj => s"gs://$bucket/${obj.getName}"}
+
+      require(locations.length <= 500, "partition has more than 500 objects - remove files beginning with '.' to enable * wildcard matching")
+
+    locations
+    }
   }
 
   def createExternalTable(project: String,
