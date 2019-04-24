@@ -19,6 +19,7 @@ package com.google.example
 import java.io.ByteArrayInputStream
 import java.nio.file.{Files, Paths}
 
+import com.google.api.gax.rpc.FixedHeaderProvider
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.bigquery._
 import com.google.cloud.storage.{Storage, StorageOptions}
@@ -97,6 +98,7 @@ object SparkJobs {
       .setLocation(c.bqLocation)
       .setCredentials(bqCreateCredentials)
       .setProjectId(c.bqProject)
+      .setHeaderProvider(FixedHeaderProvider.create("user-agent", "BQHiveLoader 0.1"))
       .build()
       .getService
 
@@ -104,6 +106,7 @@ object SparkJobs {
       .setLocation(c.bqLocation)
       .setCredentials(bqWriteCredentials)
       .setProjectId(c.bqProject)
+      .setHeaderProvider(FixedHeaderProvider.create("user-agent", "BQHiveLoader 0.1"))
       .build()
       .getService
 
