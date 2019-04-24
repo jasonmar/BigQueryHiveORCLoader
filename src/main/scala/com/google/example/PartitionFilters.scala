@@ -20,13 +20,12 @@ import com.google.example.MetaStore.Partition
 
 object PartitionFilters {
   case class PartitionFilter(expressions: Seq[FilterExpression]) {
-    /** Applies Partition Filters
-      * @param partition Partition to be evaluated
-      * @return false if Partition is rejected by a filter expression
-      */
-    def apply(partition: Partition): Boolean = {
-      val filters: Map[String,Seq[FilterExpression]] = expressions.groupBy(_.l)
-      for ((col, value) <- partition.values) {
+    @transient
+    lazy val filters: Map[String,Seq[FilterExpression]] =
+      expressions.groupBy(_.l)
+
+    def filterPartition(partitionValues: Seq[(String,String)]): Boolean = {
+      for ((col, value) <- partitionValues) {
         filters.get(col) match {
           case Some(filter) if filter.exists(_.reject(col, value)) =>
             return false
@@ -35,6 +34,13 @@ object PartitionFilters {
       }
       true
     }
+
+    /** Applies Partition Filters
+      * @param partition Partition to be evaluated
+      * @return false if Partition is rejected by a filter expression
+      */
+    def apply(partition: Partition): Boolean =
+      filterPartition(partition.values)
 
     def apply(partitions: Seq[Partition]): Seq[Partition] = {
       partitions.filter(this(_))

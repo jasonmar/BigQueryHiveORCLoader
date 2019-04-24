@@ -19,6 +19,7 @@ package com.google.example
 import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, Types}
 
 import com.google.example.MetaStore.{MetaStore, Partition, TableMetadata, mkPartSpec, parsePartitionDesc, parsePartitionTable, parseTableDesc}
+import com.google.example.PartitionFilters.PartitionFilter
 import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
@@ -94,8 +95,11 @@ case class JDBCMetaStore(jdbcUrl: String, spark: SparkSession) extends MetaStore
   private def sql(query: String): DataFrame =
     JDBCMetaStore.query(query, con, spark)
 
-  override def listPartitions(db: String, table: String): Seq[Partition] = {
+  override def listPartitions(db: String, table: String, partitionFilter: Option[PartitionFilter] = None): Seq[Partition] = {
     parsePartitionTable(sql(s"show partitions $db.$table"))
+      .filter{partValues =>
+        partitionFilter.exists(_.filterPartition(partValues))
+      }
       .flatMap{partValues =>
         val partSpec = mkPartSpec(partValues)
         val df = sql(s"describe formatted $db.$table partition($partSpec)")

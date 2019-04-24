@@ -16,6 +16,7 @@
 
 package com.google.example
 
+import com.google.example.PartitionFilters.PartitionFilter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -27,21 +28,24 @@ object MetaStore {
   trait MetaStore {
     def filterPartitions(db: String, table: String, filterExpression: String): Seq[Partition] = {
       PartitionFilters.parse(filterExpression) match {
-        case Some(filter) =>
-          filter(listPartitions(db, table))
+        case x: Option[PartitionFilter] =>
+          listPartitions(db, table, x)
         case _ =>
           throw new IllegalArgumentException(s"Invalid filter expression '$filterExpression'")
       }
     }
-    def listPartitions(db: String, table: String): Seq[Partition]
+    def listPartitions(db: String, table: String, partitionFilter: Option[PartitionFilter] = None): Seq[Partition]
     def getTable(db: String, table: String): TableMetadata
   }
 
   case class ExternalCatalogMetaStore(spark: SparkSession) extends MetaStore {
     private val cat = spark.sessionState.catalog.externalCatalog
 
-    override def listPartitions(db: String, table: String): Seq[Partition] = {
+    override def listPartitions(db: String, table: String, partitionFilter: Option[PartitionFilter] = None): Seq[Partition] = {
       cat.listPartitions(db, table)
+        .filter{part =>
+          partitionFilter.exists(_.filterPartition(part.spec.toSeq))
+        }
         .map{part =>
           Partition(part.spec.toSeq, part.location.toString)
         }
@@ -119,8 +123,11 @@ object MetaStore {
   }
 
   case class SparkSQLMetaStore(spark: SparkSession) extends MetaStore {
-    override def listPartitions(db: String, table: String): Seq[Partition] = {
+    override def listPartitions(db: String, table: String, partitionFilter: Option[PartitionFilter] = None): Seq[Partition] = {
       parsePartitionTable(spark.sql(s"show partitions $table"))
+        .filter{partValues =>
+          partitionFilter.exists(_.filterPartition(partValues))
+        }
         .flatMap{partValues =>
           val partSpec = mkPartSpec(partValues)
           val df = spark.sql(s"describe formatted $table partition($partSpec)")
