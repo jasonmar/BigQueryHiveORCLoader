@@ -110,6 +110,7 @@ object MetaStore {
   }
 
   def parseTableDetails(data: Seq[(String,String)]): TableMetadata = {
+    System.out.println("Parsing table details:\n" + data.map{x => x._1 + "\t" + x._2}.mkString("\n"))
     val fields = data.takeWhile(!_._1.startsWith("#"))
       .map(Mapping.convertTuple)
     val schema = StructType(fields)

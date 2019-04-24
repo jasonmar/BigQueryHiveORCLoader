@@ -16,8 +16,6 @@
 
 package com.google.example
 
-import java.sql.Blob
-
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
 import com.google.cloud.bigquery._
@@ -300,9 +298,8 @@ object ExternalTableManager {
       val year = colValue.substring(0,4)
       val month = colValue.substring(4,6)
       s"'$year-$month-01' as $colName"
-    } else if (colFormat.toLowerCase == "week") {
-      // TODO convert week number to date
-      throw new NotImplementedError("conversion of week number to date not implemented")
+    } else if (colFormat.toLowerCase == "YYYYWW") {
+      s"PARSE_DATE('%Y%W','$colValue') as $colName"
     } else {
       throw new IllegalArgumentException(s"unsupported colFormat '$colFormat'")
     }
@@ -326,6 +323,8 @@ object ExternalTableManager {
           schema.find(_.name == colName) match {
             case Some(field) if field.dataType.typeName == IntegerType.typeName || field.dataType.typeName == LongType.typeName =>
               s"$colValue as $colName"
+            case Some(field) if field.dataType.typeName == "date" =>
+              s"PARSE_DATE('%Y-%m-%d','$colValue') as $colName"
             case _ =>
               s"'$colValue' as $colName"
           }

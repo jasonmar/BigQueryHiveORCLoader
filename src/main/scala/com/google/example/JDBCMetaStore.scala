@@ -92,8 +92,8 @@ object JDBCMetaStore {
     val tuples = df.drop("comment")
       .collect()
       .map{row =>
-        val colName = row.getString(row.fieldIndex("col_name")).trim
-        val dataType = row.getString(row.fieldIndex("data_type")).trim
+        val colName = Option(row.getString(row.fieldIndex("col_name"))).getOrElse("").trim
+        val dataType = Option(row.getString(row.fieldIndex("data_type"))).getOrElse("").trim
         (colName, dataType)
       }
     parseTableDetails(tuples)
