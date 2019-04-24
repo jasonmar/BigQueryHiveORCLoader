@@ -69,7 +69,9 @@ object ExternalTableManager {
       .setExpirationTime(defaultExpiration)
       .build()
 
-    if (!bigquery.getTable(tableInfo.getTableId).exists())
+    val tableExists = scala.Option(bigquery.getTable(tableInfo.getTableId))
+      .map(_.exists).contains(true)
+    if (tableExists)
       bigquery.create(tableInfo)
 
     tableInfo
