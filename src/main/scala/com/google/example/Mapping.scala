@@ -68,7 +68,16 @@ object Mapping {
       case x if x == BooleanType.typeName => BooleanType
       case x if x == ByteType.typeName => ByteType
       case x if x.startsWith("char") => StringType
-      case x if x.startsWith("decimal") => DecimalType(9,2)
+      case x if x.startsWith("decimal") =>
+        x.toLowerCase
+          .stripPrefix("decimal(")
+          .stripSuffix(")")
+          .split(",") match {
+          case Array(precision, scale) if precision.forall(_.isDigit) && scale.forall(_.isDigit) =>
+            DecimalType(precision.toInt, scale.toInt)
+          case _ =>
+            DecimalType(19,2)
+        }
       case x if x.startsWith("array") => ArrayType(IntegerType)
       case x if x.startsWith("struct") => StructType(Seq.empty[StructField])
       case _ =>
