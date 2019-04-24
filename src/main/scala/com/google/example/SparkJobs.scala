@@ -119,7 +119,8 @@ object SparkJobs {
         .getOrElse(Orc)
 
     val destTableId = TableId.of(c.bqProject, c.bqDataset, c.bqTable)
-    if (!bigqueryCreate.getTable(destTableId).exists()) {
+    val destTableExists = Option(bigqueryWrite.getTable(destTableId)).isDefined
+    if (destTableExists) {
       NativeTableManager.createTable(c, table.schema, destTableId, bigqueryWrite)
     }
 
