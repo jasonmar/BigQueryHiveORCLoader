@@ -25,6 +25,7 @@ import com.google.cloud.bigquery._
 import com.google.cloud.storage.{Storage, StorageOptions}
 import com.google.example.ExternalTableManager.Orc
 import com.google.example.MetaStore._
+import org.apache.spark.SparkFiles
 import org.apache.spark.sql.SparkSession
 
 object SparkJobs {
@@ -66,33 +67,63 @@ object SparkJobs {
   def loadPartitionsJob(table: TableMetadata, partitions: Seq[Partition]): Iterator[Config] => Unit =
     (it: Iterator[Config]) => loadPartitions(it.next, table, partitions)
 
+  def readLocalOrSparkFile(maybePath: scala.Option[String]): scala.Option[Array[Byte]] = {
+    val direct = maybePath.map(Paths.get(_)).filter{_.toFile.exists()}
+    val fromSparkFiles = maybePath.map(SparkFiles.get).map(Paths.get(_)).filter{_.toFile.exists()}
+    direct.orElse(fromSparkFiles)
+      .map(Files.readAllBytes)
+      .filter(_.nonEmpty)
+  }
+
   def loadPartitions(c: Config, table: TableMetadata, partitions: Seq[Partition]): Unit = {
+    val writeKeyPath = c.bqWriteKeyFile.orElse(c.bqKeyFile)
+    val createKeyPath = c.bqCreateTableKeyFile.orElse(c.bqKeyFile)
+    val gcsKeyPath = c.gcsKeyFile.orElse(c.bqKeyFile)
+    val writeKey = readLocalOrSparkFile(writeKeyPath)
+    val createKey = readLocalOrSparkFile(createKeyPath)
+    val gcsKey = readLocalOrSparkFile(gcsKeyPath)
+    writeKeyPath.foreach{p =>
+      require(writeKey.isDefined, s"unable to load BigQuery write key from $p")
+      System.out.println(s"loaded BigQuery write key from $p")
+    }
+    createKeyPath.foreach{p =>
+      require(createKey.isDefined, s"unable to load BigQuery create key from $p")
+      System.out.println(s"loaded BigQuery create key from $p")
+    }
+    gcsKeyPath.foreach{p =>
+      require(gcsKey.isDefined, s"unable to load GCS key from $p")
+      System.out.println(s"loaded GCS key from $p")
+    }
+
     val bqCreateCredentials: GoogleCredentials =
-      c.bqCreateTableKeyFile.orElse(c.bqKeyFile) match {
-        case Some(f) =>
+      createKey match {
+        case Some(bytes) =>
           GoogleCredentials
-            .fromStream(new ByteArrayInputStream(Files.readAllBytes(Paths.get(f))))
+            .fromStream(new ByteArrayInputStream(bytes))
             .createScoped(BigQueryScope)
         case _ =>
           GoogleCredentials.getApplicationDefault
       }
 
     val bqWriteCredentials: GoogleCredentials =
-      c.bqWriteKeyFile.orElse(c.bqKeyFile) match {
-        case Some(f) =>
+      writeKey match {
+        case Some(bytes) =>
           GoogleCredentials
-            .fromStream(new ByteArrayInputStream(Files.readAllBytes(Paths.get(f))))
+            .fromStream(new ByteArrayInputStream(bytes))
             .createScoped(BigQueryScope)
         case _ =>
           GoogleCredentials.getApplicationDefault
       }
 
-    val storageCreds: GoogleCredentials = c.gcsKeyFile match {
-      case Some(f) =>
-        GoogleCredentials.fromStream(new ByteArrayInputStream(Files.readAllBytes(Paths.get(f)))).createScoped(StorageScope)
-      case _ =>
-        GoogleCredentials.getApplicationDefault
-    }
+    val storageCreds: GoogleCredentials =
+      gcsKey match {
+        case Some(bytes) =>
+          GoogleCredentials
+            .fromStream(new ByteArrayInputStream(bytes))
+            .createScoped(StorageScope)
+        case _ =>
+          GoogleCredentials.getApplicationDefault
+      }
 
     val bigqueryCreate: BigQuery = BigQueryOptions.newBuilder()
       .setLocation(c.bqLocation)
@@ -122,7 +153,7 @@ object SparkJobs {
         .getOrElse(Orc)
 
     val destTableId = TableId.of(c.bqProject, c.bqDataset, c.bqTable)
-    val destTableExists = Option(bigqueryWrite.getTable(destTableId)).isDefined
+    val destTableExists = scala.Option(bigqueryWrite.getTable(destTableId)).isDefined
     if (destTableExists) {
       NativeTableManager.createTable(c, table.schema, destTableId, bigqueryWrite)
     }
