@@ -21,6 +21,10 @@ object Config {
     new scopt.OptionParser[Config]("BQHiveLoader") {
       head("BQHiveLoader", "0.1")
 
+      opt[Boolean]("unnpartitioned")
+        .action{(_, c) => c.copy(partitioned = false, partFilters = "*")}
+        .text("flag indicating that table is not partitioned")
+
       opt[String]("partFilters")
         .action{(x, c) => c.copy(partFilters = x)}
         .text("Partition filter expression specified as date > 2019-04-18 AND region IN (A,B,C) AND part = *")
@@ -138,7 +142,8 @@ object Config {
     }
 }
 
-case class Config(partFilters: String = "",
+case class Config(partitioned: Boolean = true,
+                  partFilters: String = "",
                   partitionColumn: Option[String] = None,
                   clusterColumns: Seq[String]= Seq.empty,
                   partColFormats: Seq[(String,String)] = Seq.empty,

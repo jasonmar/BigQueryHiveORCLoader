@@ -43,6 +43,12 @@ object ExternalTableManager {
 
   def defaultExpiration: Long = System.currentTimeMillis() + 1000*60*60*6 // 6 hours
 
+  def getTable(tableId: TableId, bigquery: BigQuery): scala.Option[Table] =
+    scala.Option(bigquery.getTable(tableId))
+
+  def tableExists(tableId: TableId, bigquery: BigQuery): Boolean =
+    getTable(tableId, bigquery).exists(_.exists)
+
   def create(tableId: TableId,
              schema: Schema,
              sources: Seq[String],
@@ -71,9 +77,7 @@ object ExternalTableManager {
       .setExpirationTime(defaultExpiration)
       .build()
 
-    val tableExists = scala.Option(bigquery.getTable(tableInfo.getTableId))
-      .map(_.exists).contains(true)
-    if (tableExists)
+    if (!tableExists(tableInfo.getTableId, bigquery))
       bigquery.create(tableInfo)
 
     tableInfo
@@ -174,7 +178,8 @@ object ExternalTableManager {
         project, dataset, tableName,
         tableMetadata, part, storageFormat, bigqueryCreate, gcs)
 
-      val renameOrcCols = hasOrcPositionalColNames(extTable.getTableId, bigqueryCreate)
+      val renameOrcCols = hasOrcPositionalColNames(
+        waitForCreation(extTable.getTableId, timeoutMillis = 120000L, bigqueryCreate))
 
       loadPart(
         destTableId = TableId.of(project, dataset, tableName),
@@ -235,9 +240,23 @@ object ExternalTableManager {
     ).mkString("_")
   }
 
-  def hasOrcPositionalColNames(table: TableId, bigquery: BigQuery): Boolean = {
+  def waitForCreation(tableId: TableId, timeoutMillis: Long, bigquery: BigQuery): Table = {
+    require(timeoutMillis > 0)
+    val start = System.currentTimeMillis
+    while ((System.currentTimeMillis - start) < timeoutMillis) {
+      Thread.sleep(5000L)
+      getTable(tableId, bigquery) match {
+        case Some(table) =>
+          return table
+        case _ =>
+      }
+    }
+    throw new RuntimeException(s"timed out waiting for ${tableId.getDataset}.${tableId.getTable} table creation")
+  }
+
+  def hasOrcPositionalColNames(table: Table): Boolean = {
     import scala.collection.JavaConverters.asScalaIteratorConverter
-    bigquery.getTable(table)
+    table
       .getDefinition[ExternalTableDefinition]
       .getSchema
       .getFields.iterator.asScala

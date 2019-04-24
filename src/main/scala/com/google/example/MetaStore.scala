@@ -21,14 +21,14 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 object MetaStore {
-  case class TableMetadata(schema: StructType, partitionColumnNames: Seq[String])
+  case class TableMetadata(schema: StructType, partitionColumnNames: Seq[String], location: Option[String] = None)
 
   case class Partition(values: Seq[(String,String)], location: String)
 
   trait MetaStore {
     def filterPartitions(db: String, table: String, filterExpression: String): Seq[Partition] = {
       PartitionFilters.parse(filterExpression) match {
-        case x: Option[PartitionFilter] =>
+        case x: Some[PartitionFilter] =>
           listPartitions(db, table, x)
         case _ =>
           throw new IllegalArgumentException(s"Invalid filter expression '$filterExpression'")
@@ -119,7 +119,9 @@ object MetaStore {
       .dropWhile(_.startsWith("#"))
       .takeWhile(_.trim.nonEmpty)
 
-    TableMetadata(schema, partColNames)
+    val location = data.find(_._1.startsWith("Location")).map(_._2)
+
+    TableMetadata(schema, partColNames, location)
   }
 
   case class SparkSQLMetaStore(spark: SparkSession) extends MetaStore {

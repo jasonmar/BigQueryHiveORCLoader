@@ -53,6 +53,12 @@ object PartitionFilters {
     def reject(column: String, value: String): Boolean = !apply(column, value)
   }
 
+  case object MatchAll extends FilterExpression {
+    override val l: String = "*"
+    override def apply(column: String, value: String): Boolean =
+      true
+  }
+
   case class Equals(l: String, r: String) extends FilterExpression {
     override def apply(column: String, value: String): Boolean = {
       l == column && (r == "*" || r == value)
@@ -146,6 +152,8 @@ object PartitionFilters {
           Option(In(l, set))
         case _ => None
       }
+    } else if (expr.trim == "*") {
+      Option(MatchAll)
     } else None
   }
 }

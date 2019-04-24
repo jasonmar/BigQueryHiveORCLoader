@@ -57,13 +57,25 @@ object SparkJobs {
 
   def runWithMetaStore(config: Config, metaStore: MetaStore, spark: SparkSession): Unit = {
     val table = metaStore.getTable(config.hiveDbName, config.hiveTableName)
-    val partitions: Seq[Partition] = metaStore.filterPartitions(config.hiveDbName, config.hiveTableName, config.partFilters)
-
-    System.out.println(s"found partitions: ${partitions.map(_.toString).mkString("\n")}")
-
-    if (partitions.isEmpty)
-      throw new RuntimeException(s"No partitions found with filter expression '${config.partFilters}'")
-
+    val partitions: Seq[Partition] =
+      if (table.location.isEmpty && config.partitioned) {
+        metaStore.filterPartitions(db = config.hiveDbName,
+          table = config.hiveTableName,
+          filterExpression = config.partFilters
+        ) match {
+          case parts if parts.nonEmpty =>
+            parts
+          case _ =>
+            throw new RuntimeException(s"No partitions found with filter expression '${config.partFilters}'")
+        }
+      } else {
+        table.location match {
+          case Some(location) =>
+            Seq(Partition(Seq.empty, location))
+          case _ =>
+            throw new RuntimeException("Location not found in table description for non-partitioned table")
+        }
+      }
     val sc = spark.sparkContext
     sc.runJob(rdd = sc.makeRDD(Seq(config), numSlices = 1),
               func = loadPartitionsJob(table, partitions))
@@ -158,8 +170,7 @@ object SparkJobs {
         .getOrElse(Orc)
 
     val destTableId = TableId.of(c.bqProject, c.bqDataset, c.bqTable)
-    val destTableExists = scala.Option(bigqueryWrite.getTable(destTableId)).isDefined
-    if (destTableExists) {
+    if (!ExternalTableManager.tableExists(destTableId, bigqueryWrite)) {
       NativeTableManager.createTable(c, table.schema, destTableId, bigqueryWrite)
     }
 
