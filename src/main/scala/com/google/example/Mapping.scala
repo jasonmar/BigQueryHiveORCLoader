@@ -53,9 +53,11 @@ object Mapping {
 
   def getDataTypeForName(dataTypeName: String): DataType = {
     dataTypeName match {
+      case x if x.startsWith("varchar") => StringType
       case x if x == StringType.typeName => StringType
       case x if x == IntegerType.typeName => IntegerType
       case x if x == "int" => IntegerType
+      case x if x == "smallint" => ShortType
       case x if x == "bigint" => LongType
       case x if x == LongType.typeName => LongType
       case x if x == DoubleType.typeName => DoubleType
@@ -65,7 +67,8 @@ object Mapping {
       case x if x == ShortType.typeName => ShortType
       case x if x == BooleanType.typeName => BooleanType
       case x if x == ByteType.typeName => ByteType
-      case x if x.startsWith("decimal") => DecimalType(19,9)
+      case x if x.startsWith("char") => StringType
+      case x if x.startsWith("decimal") => DecimalType(9,2)
       case x if x.startsWith("array") => ArrayType(IntegerType)
       case x if x.startsWith("struct") => StructType(Seq.empty[StructField])
       case _ =>

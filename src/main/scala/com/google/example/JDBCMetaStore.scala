@@ -18,7 +18,8 @@ package com.google.example
 
 import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, Types}
 
-import com.google.example.MetaStore.{MetaStore, Partition, TableMetadata, mkPartSpec, parsePartitionDesc, parsePartitionTable, parseTableDesc}
+import com.google.example.JDBCMetaStore._
+import com.google.example.MetaStore.{MetaStore, Partition, TableMetadata, mkPartSpec, parsePartitionTable}
 import com.google.example.PartitionFilters.PartitionFilter
 import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
@@ -81,19 +82,67 @@ object JDBCMetaStore {
     spark.createDataFrame(rdd, schema)
   }
 
-  def query(query: String, con: Connection, spark: SparkSession): DataFrame = {
+  def executeQuery(query: String, con: Connection, spark: SparkSession): DataFrame = {
     val stmt = con.createStatement
     val rs = stmt.executeQuery(query)
     convertResultSetToDataFrame(rs, spark)
+  }
+
+  def parseTableDesc(df: DataFrame): TableMetadata = {
+    val tuples = df.drop("comment")
+      .collect()
+      .map{row =>
+        val colName = row.getString(row.fieldIndex("col_name")).trim
+        val dataType = row.getString(row.fieldIndex("data_type")).trim
+        (colName, dataType)
+      }
+    parseTableDetails(tuples)
+  }
+
+  def parseTableDetails(data: Seq[(String,String)]): TableMetadata = {
+    val fields = data
+      .dropWhile{x => x._1.startsWith("#") || x._1.isEmpty}
+      .takeWhile(_._1.nonEmpty)
+      .map(Mapping.convertTuple)
+
+    val schema = StructType(fields)
+
+    val partColNames = data.map(_._1)
+      .dropWhile(!_.startsWith("# Partition Information"))
+      .takeWhile(!_.startsWith("# Detailed Table Information"))
+      .filter(_.nonEmpty)
+
+    val location = data.find(_._1.startsWith("Location")).map(_._2)
+
+    TableMetadata(schema, partColNames, location)
+  }
+
+  def parsePartitionDesc(partValues: Seq[(String,String)], df: DataFrame): Option[Partition] = {
+    val tuples = df.drop("comment")
+      .collect()
+      .map{row =>
+        val colName = row.getString(row.fieldIndex("col_name"))
+        val dataType = row.getString(row.fieldIndex("data_type"))
+        (colName, dataType)
+      }
+    parsePartitionDetails(partValues, tuples)
+  }
+
+  def parsePartitionDetails(partValues: Seq[(String,String)], data: Seq[(String,String)]): Option[Partition] = {
+    data.find(_._1.startsWith("Location"))
+      .map{x =>
+        val location = x._2
+        Partition(partValues, location)
+      }
   }
 }
 
 case class JDBCMetaStore(jdbcUrl: String, spark: SparkSession) extends MetaStore {
   @transient
-  private val con = JDBCMetaStore.connect(jdbcUrl)
+  private val con = connect(jdbcUrl)
 
   private def sql(query: String): DataFrame =
-    JDBCMetaStore.query(query, con, spark)
+    executeQuery(query, con, spark)
 
   override def listPartitions(db: String, table: String, partitionFilter: Option[PartitionFilter] = None): Seq[Partition] = {
     parsePartitionTable(sql(s"show partitions $db.$table"))
