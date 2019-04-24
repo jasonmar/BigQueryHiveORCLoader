@@ -99,7 +99,6 @@ case class JDBCMetaStore(jdbcUrl: String, spark: SparkSession) extends MetaStore
       .flatMap{partValues =>
         val partSpec = mkPartSpec(partValues)
         val df = sql(s"describe formatted $db.$table partition($partSpec)")
-        df.show(numRows = 100, truncate = false)
         parsePartitionDesc(partValues, df)
       }
   }

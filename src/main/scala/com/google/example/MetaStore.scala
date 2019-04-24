@@ -87,7 +87,7 @@ object MetaStore {
   }
 
   def parsePartitionDetails(partValues: Seq[(String,String)], data: Seq[(String,String)]): Option[Partition] = {
-    data.find(_._1 == "Location")
+    data.find(_._1.startsWith("Location"))
       .map{x =>
         val location = x._2
         Partition(partValues, location)
