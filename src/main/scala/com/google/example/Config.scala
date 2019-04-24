@@ -21,8 +21,8 @@ object Config {
     new scopt.OptionParser[Config]("BQHiveLoader") {
       head("BQHiveLoader", "0.1")
 
-      opt[Boolean]("unnpartitioned")
-        .action{(_, c) => c.copy(partitioned = false, partFilters = "*")}
+      opt[Boolean]("partitioned")
+        .action{(x, c) => c.copy(partitioned = x, partFilters = "*")}
         .text("flag indicating that table is not partitioned")
 
       opt[String]("partFilters")
