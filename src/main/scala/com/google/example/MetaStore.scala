@@ -21,7 +21,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 object MetaStore {
-  case class TableMetadata(schema: StructType, partitionColumnNames: Seq[String], location: Option[String] = None)
+  case class TableMetadata(schema: StructType, partitionColumnNames: Seq[String], location: Option[String] = None, raw: Seq[(String,String)] = Seq.empty)
 
   case class Partition(values: Seq[(String,String)], location: String)
 

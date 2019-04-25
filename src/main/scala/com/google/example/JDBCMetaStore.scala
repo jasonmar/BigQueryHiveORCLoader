@@ -114,7 +114,7 @@ object JDBCMetaStore {
 
     val location = data.find(_._1.startsWith("Location")).map(_._2)
 
-    TableMetadata(schema, partColNames, location)
+    TableMetadata(schema, partColNames, location, data)
   }
 
   def parsePartitionDesc(partValues: Seq[(String,String)], df: DataFrame): Option[Partition] = {

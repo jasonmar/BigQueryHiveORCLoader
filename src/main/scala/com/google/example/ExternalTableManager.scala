@@ -237,7 +237,7 @@ object ExternalTableManager {
       case Success(tableResult) =>
         tableResult
       case Failure(exception) =>
-        throw new RuntimeException(s"failed to run sql:\n$sql\n\nschema:\n${schema.map(_.toString()).mkString("\n")}", exception)
+        throw new RuntimeException(s"failed to run sql:\n$sql\n\npartition:\n$partition\n\nschema:\n${schema.map(_.toString()).mkString("\n")}", exception)
     }
   }
 
@@ -255,7 +255,7 @@ object ExternalTableManager {
     require(timeoutMillis > 0)
     val start = System.currentTimeMillis
     while ((System.currentTimeMillis - start) < timeoutMillis) {
-      Thread.sleep(5000L)
+      Thread.sleep(2000L)
       getTable(tableId, bigquery) match {
         case Some(table) =>
           return table

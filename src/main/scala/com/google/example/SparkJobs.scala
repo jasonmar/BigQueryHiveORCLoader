@@ -28,6 +28,8 @@ import com.google.example.MetaStore._
 import org.apache.spark.SparkFiles
 import org.apache.spark.sql.SparkSession
 
+import scala.util.{Failure, Success, Try}
+
 object SparkJobs {
   val BigQueryScope = "https://www.googleapis.com/auth/bigquery"
   val StorageScope = "https://www.googleapis.com/auth/devstorage.read_write"
@@ -174,7 +176,8 @@ object SparkJobs {
       NativeTableManager.createTable(c, table.schema, destTableId, bigqueryWrite)
     }
 
-    ExternalTableManager.loadParts(project = c.bqProject,
+    Try(
+      ExternalTableManager.loadParts(project = c.bqProject,
                                    dataset = c.bqDataset,
                                    tableName = c.bqTable,
                                    tableMetadata = table,
@@ -187,5 +190,11 @@ object SparkJobs {
                                    overwrite = c.bqOverwrite,
                                    batch = c.bqBatch,
                                    gcs = gcs)
+    ) match {
+      case Success(value) =>
+        value
+      case Failure(exception) =>
+        throw new RuntimeException(s"failed to load partitions with config:\n$c\n\ntable:\n$table", exception)
+    }
   }
 }

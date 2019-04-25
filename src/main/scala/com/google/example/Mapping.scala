@@ -58,6 +58,7 @@ object Mapping {
       case x if x == IntegerType.typeName => IntegerType
       case x if x == "int" => IntegerType
       case x if x == "smallint" => ShortType
+      case x if x == "tinyint" => ShortType
       case x if x == "bigint" => LongType
       case x if x == LongType.typeName => LongType
       case x if x == DoubleType.typeName => DoubleType
