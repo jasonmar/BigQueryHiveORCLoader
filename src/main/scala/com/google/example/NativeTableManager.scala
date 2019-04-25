@@ -34,7 +34,7 @@ object NativeTableManager {
       .build())
   }
 
-  def createTable(c: Config, schema: StructType, destTableId: TableId, bigquery: BigQuery) ={
+  def createTable(c: Config, schema: StructType, destTableId: TableId, bigquery: BigQuery): Table ={
     require(c.clusterColumns.nonEmpty, "destination table does not exist, clusterColumns must not be empty")
     require(c.partitionColumn.nonEmpty, "destination table does not exist, partitionColumn must not be empty")
     val destTableSchema = if (c.partitionColumn.map(_.toLowerCase).contains("none")) {
@@ -46,11 +46,27 @@ object NativeTableManager {
     val destTableDefBuilder = StandardTableDefinition.newBuilder()
       .setLocation(c.bqLocation)
       .setSchema(destTableSchema)
-      .setTimePartitioning(TimePartitioning.newBuilder(TimePartitioning.Type.DAY)
-        .setField(c.partitionColumn.map(_.toLowerCase)
-          .filterNot(_ == "none")
-          .getOrElse(c.unusedColumnName))
-        .build())
+
+    if (c.partitionColumn.contains("none") && c.clusterColumns.exists(_ != "none")) {
+      // Only set null partition column if both partition column and cluster columns are provided
+      destTableDefBuilder
+        .setTimePartitioning(TimePartitioning
+          .newBuilder(TimePartitioning.Type.DAY)
+          .setField(c.unusedColumnName)
+          .build())
+    } else {
+      c.partitionColumn match {
+        case Some(partitionCol) if partitionCol != "none" =>
+          // Only set partition column if partition column is set
+          destTableDefBuilder
+            .setTimePartitioning(TimePartitioning
+              .newBuilder(TimePartitioning.Type.DAY)
+              .setField(partitionCol)
+              .build())
+        case _ =>
+          // Don't set a partition column if partition column is none
+      }
+    }
 
     if (c.clusterColumns.map(_.toLowerCase) != Seq("none")) {
       import scala.collection.JavaConverters.seqAsJavaListConverter

@@ -298,10 +298,10 @@ object ExternalTableManager {
       val year = colValue.substring(0,4)
       val month = colValue.substring(4,6)
       s"'$year-$month-01' as $colName"
-    } else if (colFormat.toLowerCase == "YYYYWW") {
+    } else if (colFormat == "YYYYWW") {
       s"PARSE_DATE('%Y%W','$colValue') as $colName"
     } else {
-      throw new IllegalArgumentException(s"unsupported colFormat '$colFormat'")
+      s"PARSE_DATE('$colFormat','$colValue') as $colName"
     }
   }
 
@@ -325,6 +325,8 @@ object ExternalTableManager {
               s"$colValue as $colName"
             case Some(field) if field.dataType.typeName == "date" =>
               s"PARSE_DATE('%Y-%m-%d','$colValue') as $colName"
+            case Some(field) if field.dataType.typeName == "timestamp" =>
+              s"DATE(PARSE_TIMESTAMP('%Y%m%d%H%M%S','$colValue')) as $colName"
             case _ =>
               s"'$colValue' as $colName"
           }

@@ -30,11 +30,11 @@ object Config {
         .text("Partition filter expression specified as date > 2019-04-18 AND region IN (A,B,C) AND part = *")
 
       opt[String]("partitionColumn")
-        .action{(x, c) => c.copy(partitionColumn = Option(x))}
+        .action{(x, c) => c.copy(partitionColumn = Option(x.toLowerCase))}
         .text("Partition column name")
 
       opt[Seq[String]]("clusterCols")
-        .action{(x, c) => c.copy(clusterColumns = x)}
+        .action{(x, c) => c.copy(clusterColumns = x.map(_.toLowerCase))}
         .text("Cluster columns if creating BigQuery table")
 
       opt[Map[String,String]]("partColFormats")
