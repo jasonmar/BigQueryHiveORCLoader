@@ -24,6 +24,8 @@ import com.google.example.Mapping.convertStructType
 import com.google.example.MetaStore.{Partition, TableMetadata}
 import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 
+import scala.util.{Failure, Success, Try}
+
 object ExternalTableManager {
   sealed trait StorageFormat
   case object Orc extends StorageFormat
@@ -227,11 +229,16 @@ object ExternalTableManager {
       .setUseQueryCache(false)
       .build()
 
-    bigqueryWrite.query(query, JobId.newBuilder()
+    Try(bigqueryWrite.query(query, JobId.newBuilder()
       .setProject(extTableId.getProject)
       .setLocation("US")
       .setJob(jobid(destTableId, partition))
-      .build())
+      .build())) match {
+      case Success(tableResult) =>
+        tableResult
+      case Failure(exception) =>
+        throw new RuntimeException(s"failed to run sql:\n$sql\n\nschema:\n${schema.map(_.toString()).mkString("\n")}", exception)
+    }
   }
 
   def jobid(table: TableId, partition: Partition): String = {
