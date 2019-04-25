@@ -117,11 +117,7 @@ object Config {
 
       opt[String]("krbPrincipal")
         .action{(x, c) => c.copy(krbPrincipal = Option(x))}
-        .text("Kerberos user principal (user/host.example.com@EXAMPLE.COM)")
-
-      opt[String]("krbServiceName")
-        .action{(x, c) => c.copy(krbServiceName = Option(x))}
-        .text("Kerberos service name")
+        .text("Kerberos user principal (<serviceName>/<hostname>@KerberosRealmName)")
 
       note("Loads Hive external ORC tables into BigQuery")
 
@@ -164,6 +160,5 @@ case class Config(partitioned: Boolean = true,
                   bqWriteKeyFile: Option[String] = None,
                   gcsKeyFile: Option[String] = None,
                   krbKeyTab: Option[String] = None,
-                  krbPrincipal: Option[String] = None,
-                  krbServiceName: Option[String] = Option("bqhiveorcloader")
+                  krbPrincipal: Option[String] = None
                  )

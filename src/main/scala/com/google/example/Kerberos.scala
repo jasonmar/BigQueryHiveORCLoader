@@ -22,7 +22,7 @@ import com.sun.security.auth.module.Krb5LoginModule
 import javax.security.auth.login.{AppConfigurationEntry, Configuration}
 
 object Kerberos {
-  def configureJaas(configName: String, keyTab: String, principal: String, serviceName: String): Unit = {
+  def configureJaas(configName: String, keyTab: String, principal: String): Unit = {
     Configuration.setConfiguration(
       new Configuration() {
         private val ConfigName = configName
@@ -36,7 +36,7 @@ object Kerberos {
               ImmutableMap.builder()
                 .put("principal", principal)
                 .put("keyTab", keyTab)
-                .put("serviceName", serviceName)
+                .put("doNotPrompt", "true")
                 .put("useKeyTab", "true")
                 .put("debug", "false")
                 .put("storeKey", "true")

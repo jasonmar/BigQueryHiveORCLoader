@@ -95,6 +95,13 @@ object SparkJobs {
   }
 
   def loadPartitions(c: Config, table: TableMetadata, partitions: Seq[Partition]): Unit = {
+    for {
+      keytab <- c.krbKeyTab
+      principal <- c.krbPrincipal
+    } yield {
+      Kerberos.configureJaas("BQHiveLoader", keytab, principal)
+    }
+
     val writeKeyPath = c.bqWriteKeyFile.orElse(c.bqKeyFile)
     val createKeyPath = c.bqCreateTableKeyFile.orElse(c.bqKeyFile)
     val gcsKeyPath = c.gcsKeyFile.orElse(c.bqKeyFile)

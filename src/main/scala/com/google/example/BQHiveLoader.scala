@@ -24,9 +24,8 @@ object BQHiveLoader {
         for {
           keytab <- config.krbKeyTab
           principal <- config.krbPrincipal
-          serviceName <- config.krbServiceName
         } yield {
-          Kerberos.configureJaas("BQHiveLoader", keytab, principal, serviceName)
+          Kerberos.configureJaas("BQHiveLoader", keytab, principal)
         }
 
         SparkJobs.run(config)
