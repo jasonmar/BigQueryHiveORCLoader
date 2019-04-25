@@ -101,8 +101,8 @@ object JDBCMetaStore {
 
   def parseTableDetails(data: Seq[(String,String)]): TableMetadata = {
     val fields = data
-      .dropWhile{x => x._1.startsWith("#") || x._1.isEmpty}
-      .takeWhile(_._1.nonEmpty)
+      .takeWhile(!_._1.startsWith("# Detailed Table Information"))
+      .filterNot(x => x._1.startsWith("#") || x._1.isEmpty)
       .map(Mapping.convertTuple)
 
     val schema = StructType(fields)
@@ -110,7 +110,7 @@ object JDBCMetaStore {
     val partColNames = data.map(_._1)
       .dropWhile(!_.startsWith("# Partition Information"))
       .takeWhile(!_.startsWith("# Detailed Table Information"))
-      .filter(_.nonEmpty)
+      .filterNot(x => x.startsWith("#") || x.isEmpty)
 
     val location = data.find(_._1.startsWith("Location")).map(_._2)
 
@@ -121,8 +121,10 @@ object JDBCMetaStore {
     val tuples = df.drop("comment")
       .collect()
       .map{row =>
-        val colName = row.getString(row.fieldIndex("col_name"))
-        val dataType = row.getString(row.fieldIndex("data_type"))
+        val colName = Option(row.getString(row.fieldIndex("col_name")))
+          .getOrElse("").trim
+        val dataType = Option(row.getString(row.fieldIndex("data_type")))
+          .getOrElse("").trim
         (colName, dataType)
       }
     parsePartitionDetails(partValues, tuples)
