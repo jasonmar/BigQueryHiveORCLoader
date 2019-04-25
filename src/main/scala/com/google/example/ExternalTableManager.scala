@@ -235,13 +235,13 @@ object ExternalTableManager {
   }
 
   def jobid(table: TableId, partition: Partition): String = {
-    Seq(
+    validJobId(Seq(
       "load",
       table.getDataset,
       table.getTable,
       partition.values.map(_._2).mkString("_"),
       (System.currentTimeMillis()/1000).toString
-    ).mkString("_")
+    ).mkString("_"))
   }
 
   def waitForCreation(tableId: TableId, timeoutMillis: Long, bigquery: BigQuery): Table = {
