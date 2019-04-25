@@ -60,7 +60,7 @@ object SparkJobs {
   def runWithMetaStore(config: Config, metaStore: MetaStore, spark: SparkSession): Unit = {
     val table = metaStore.getTable(config.hiveDbName, config.hiveTableName)
     val partitions: Seq[Partition] =
-      if (table.location.isEmpty && config.partitioned) {
+      if (config.partitioned && table.partitionColumnNames.nonEmpty) {
         metaStore.filterPartitions(db = config.hiveDbName,
           table = config.hiveTableName,
           filterExpression = config.partFilters
