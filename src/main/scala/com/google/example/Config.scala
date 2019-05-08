@@ -39,7 +39,7 @@ object Config {
 
       opt[Map[String,String]]("partColFormats")
         .action{(x, c) => c.copy(partColFormats = x.toSeq)}
-        .text("Partition Column Formats (example: 'month,YYYYMM')")
+        .text("Partition Column Formats to parse int or string as date (example: 'date=%Y-%m-%d,month=YYYYMM')")
 
       opt[String]("hiveJdbcUrl")
         .action{(x, c) => c.copy(hiveJdbcUrl = x)}
@@ -101,7 +101,7 @@ object Config {
 
       opt[Boolean]( "bqOverwrite")
         .action{(x, c) => c.copy(bqOverwrite = x)}
-        .text("BigQuery overwrite flag (default: false)")
+        .text("BigQuery overwrite flag - WARNING: ALL data in the table will be deleted (default: false)")
 
       opt[Boolean]( "bqBatch")
         .action{(x, c) => c.copy(bqBatch = x)}
@@ -117,7 +117,7 @@ object Config {
 
       opt[String]("krbPrincipal")
         .action{(x, c) => c.copy(krbPrincipal = Option(x))}
-        .text("Kerberos user principal (<serviceName>/<hostname>@KerberosRealmName)")
+        .text("Kerberos principal (user@realm or service/host@realm)")
 
       note("Loads Hive external ORC tables into BigQuery")
 

@@ -211,6 +211,7 @@ object ExternalTableManager {
                overwrite: Boolean = false,
                batch: Boolean = true,
                renameOrcCols: Boolean = false): TableResult = {
+    // TODO use dest table to provide schema
     val sql = generateSelectFromExternalTable(
       extTable = extTableId,
       schema = schema,
@@ -306,7 +307,7 @@ object ExternalTableManager {
       val month = colValue.substring(4,6)
       s"'$year-$month-01' as $colName"
     } else if (colFormat == "YYYYWW") {
-      s"PARSE_DATE('%Y%W','$colValue') as $colName"
+      s"PARSE_DATE('%Y%U','$colValue') as $colName"
     } else {
       s"PARSE_DATE('$colFormat','$colValue') as $colName"
     }

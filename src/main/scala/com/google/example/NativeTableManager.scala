@@ -22,7 +22,7 @@ import org.apache.spark.sql.types.{DateType, StructType}
 
 object NativeTableManager {
   def getExistingPartitions(tableId: TableId, bigQuery: BigQuery): TableResult = {
-    val tableSpec = tableId.getDataset + "." + tableId.getTable
+    val tableSpec = tableId.getProject + ":" + tableId.getDataset + "." + tableId.getTable
     tableId.toString + "$__PARTITIONS_SUMMARY__"
     bigQuery.query(QueryJobConfiguration.newBuilder(
       s"""SELECT

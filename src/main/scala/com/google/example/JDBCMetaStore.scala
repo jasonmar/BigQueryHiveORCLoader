@@ -16,7 +16,7 @@
 
 package com.google.example
 
-import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, Types}
+import java.sql.{Connection, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData, Types}
 
 import com.google.example.JDBCMetaStore._
 import com.google.example.MetaStore.{MetaStore, Partition, TableMetadata, mkPartSpec, parsePartitionTable}
@@ -24,13 +24,11 @@ import com.google.example.PartitionFilters.PartitionFilter
 import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
-object JDBCMetaStore {
-  val HiveDriver = "org.apache.hive.jdbc.HiveDriver"
-
+object JDBCMetaStore extends Logging {
   def connect(jdbcUrl: String): Connection = {
-    Class.forName(HiveDriver)
+    Class.forName("org.apache.hive.jdbc.HiveDriver")
     DriverManager.getConnection(jdbcUrl)
   }
 
@@ -80,6 +78,70 @@ object JDBCMetaStore {
     val rdd = spark.sparkContext.makeRDD(readRowsFromResultSet(rs), numSlices = 1)
     val schema = convertResultSetMetadataToStructType(rs.getMetaData)
     spark.createDataFrame(rdd, schema)
+  }
+
+  case class ResultSetIterator(private val rs: ResultSet) extends Iterator[Seq[String]] {
+    private val meta = rs.getMetaData
+    private val n = meta.getColumnCount
+    val schema: StructType = {
+      val buf = ArrayBuffer.empty[StructField]
+      for (i <- 0 until n) {
+        buf.append(StructField(meta.getColumnName(i), StringType))
+      }
+      StructType(buf.result().toArray)
+    }
+
+    override def hasNext: Boolean = nextRow.isDefined
+    private var hasRemaining: Boolean = true
+    private var nextRow: Option[Seq[String]] = read()
+
+    private def read(): Option[Seq[String]] = {
+      if (!hasRemaining || !rs.next()) {
+        hasRemaining = false
+        return None
+      }
+      val rows = (0 until n).map{i =>
+        Option(rs.getObject(i+1)).map(_.toString).getOrElse("")
+      }
+      Option(rows)
+    }
+
+    override def next(): Seq[String] = {
+      val result = nextRow
+      nextRow = read()
+      result.orNull
+    }
+  }
+
+  case class StatementIterator(stmt: PreparedStatement) extends Iterator[ResultSet] {
+    private var nextResultSet: Option[ResultSet] = read()
+    private var hasRemaining: Boolean = true
+
+    private def read(): Option[ResultSet] = {
+      if (hasRemaining && stmt.getMoreResults) {
+        val rs = Option(stmt.getResultSet)
+        if (rs.isEmpty) hasRemaining = false
+        rs
+      } else None
+    }
+
+    override def hasNext: Boolean = nextResultSet.isDefined
+
+    override def next(): ResultSet = {
+      val result = nextResultSet
+      nextResultSet = read()
+      result.orNull
+    }
+  }
+
+  def executeQueries(queries: Seq[String], con: Connection) : Seq[Seq[Seq[String]]] = {
+    val stmt = con.prepareStatement(queries.mkString(";\n\n"))
+    if (stmt.execute()) {
+      StatementIterator(stmt)
+        .map{rs =>
+          ResultSetIterator(rs).toArray.toSeq
+        }.toArray.toSeq
+    } else Seq.empty
   }
 
   def executeQuery(query: String, con: Connection, spark: SparkSession): DataFrame = {
@@ -147,13 +209,26 @@ case class JDBCMetaStore(jdbcUrl: String, spark: SparkSession) extends MetaStore
     executeQuery(query, con, spark)
 
   override def listPartitions(db: String, table: String, partitionFilter: Option[PartitionFilter] = None): Seq[Partition] = {
-    parsePartitionTable(sql(s"show partitions $db.$table"))
+    val partitions = parsePartitionTable(sql(s"show partitions $db.$table"))
       .filter{partValues =>
         partitionFilter.exists(_.filterPartition(partValues))
       }
-      .flatMap{partValues =>
+
+    val sqlQueries = partitions
+      .map{partValues =>
         val partSpec = mkPartSpec(partValues)
-        val df = sql(s"describe formatted $db.$table partition($partSpec)")
+        s"describe formatted $db.$table partition($partSpec)"
+      }
+
+    val results: Seq[Seq[(String,String)]] = executeQueries(sqlQueries, con)
+      .map{_.map{row => (row.headOption.getOrElse(""), row.lift(1).getOrElse(""))}}
+
+    import spark.implicits._
+    partitions
+      .zip(results)
+      .flatMap{x =>
+        val (partValues, describeRows) = x
+        val df = describeRows.toDF("col_name", "data_type")
         parsePartitionDesc(partValues, df)
       }
   }

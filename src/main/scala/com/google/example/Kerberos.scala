@@ -16,37 +16,33 @@
 
 package com.google.example
 
-import com.google.common.base.Preconditions.checkArgument
 import com.google.common.collect.ImmutableMap
-import com.sun.security.auth.module.Krb5LoginModule
 import javax.security.auth.login.{AppConfigurationEntry, Configuration}
 
 object Kerberos {
-  def configureJaas(configName: String, keyTab: String, principal: String): Unit = {
-    Configuration.setConfiguration(
-      new Configuration() {
-        private val ConfigName = configName
-        @Override
-        def getAppConfigurationEntry(name: String): Array[AppConfigurationEntry] = {
-          checkArgument(ConfigName.equals(name))
-          Array(
-            new AppConfigurationEntry(
-              classOf[Krb5LoginModule].getCanonicalName,
-              AppConfigurationEntry.LoginModuleControlFlag.REQUIRED,
-              ImmutableMap.builder()
-                .put("principal", principal)
-                .put("keyTab", keyTab)
-                .put("doNotPrompt", "true")
-                .put("useKeyTab", "true")
-                .put("debug", "false")
-                .put("storeKey", "true")
-                .put("useTicketCache", "false")
-                .put("refreshKrb5Config", "true")
-                .build()
-            )
-          )
-        }
-      }
+  private def createEntry(principal: String, keyTab: String): AppConfigurationEntry =
+    new AppConfigurationEntry(
+      "com.sun.security.auth.module.Krb5LoginModule",
+      AppConfigurationEntry.LoginModuleControlFlag.REQUIRED,
+      ImmutableMap.builder()
+        .put("principal", principal)
+        .put("keyTab", keyTab)
+        .put("doNotPrompt", "true")
+        .put("useKeyTab", "true")
+        .put("debug", "false")
+        .put("storeKey", "true")
+        .put("useTicketCache", "false")
+        .put("refreshKrb5Config", "true")
+        .build()
     )
+
+  class StaticConfiguration(private val entries: Array[AppConfigurationEntry]) extends Configuration {
+    override def getAppConfigurationEntry(name: String): Array[AppConfigurationEntry] = entries
   }
+
+  private def createConfig(principal: String, keyTab: String): Configuration =
+    new StaticConfiguration(Array(createEntry(principal, keyTab)))
+
+  def configureJaas(keyTab: String, principal: String): Unit =
+    Configuration.setConfiguration(createConfig(principal, keyTab))
 }

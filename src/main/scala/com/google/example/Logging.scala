@@ -16,28 +16,10 @@
 
 package com.google.example
 
+import org.apache.log4j.Logger
 
-object BQHiveLoader extends Logging {
-  def init(): Unit = {
-    Util.quietSparkLogs()
-  }
 
-  def main(args: Array[String]): Unit = {
-    Config.Parser.parse(args, Config()) match {
-      case Some(config) =>
-        init()
-        for {
-          keytab <- config.krbKeyTab
-          principal <- config.krbPrincipal
-        } yield {
-          Kerberos.configureJaas(keytab, principal)
-        }
-
-        SparkJobs.run(config)
-
-      case _ =>
-        System.err.println("Invalid args")
-        System.exit(1)
-    }
-  }
+trait Logging {
+  @transient
+  protected lazy val logger: Logger = Util.newLogger(this.getClass.getCanonicalName.stripSuffix("$"))
 }

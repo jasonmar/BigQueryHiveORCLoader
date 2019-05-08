@@ -30,7 +30,7 @@ import org.apache.spark.sql.SparkSession
 
 import scala.util.{Failure, Success, Try}
 
-object SparkJobs {
+object SparkJobs extends Logging {
   val BigQueryScope = "https://www.googleapis.com/auth/bigquery"
   val StorageScope = "https://www.googleapis.com/auth/devstorage.read_write"
 
@@ -41,6 +41,7 @@ object SparkJobs {
       .enableHiveSupport
       .getOrCreate()
 
+    logger.info(s"launching with metastore type '${config.hiveMetastoreType}'")
     val metaStore = {
       config.hiveMetastoreType match {
         case "jdbc" =>
@@ -66,6 +67,7 @@ object SparkJobs {
           filterExpression = config.partFilters
         ) match {
           case parts if parts.nonEmpty =>
+            logger.info(s"Selected ${parts.length} partitions for table '${config.hiveDbName}.${config.hiveTableName}':\n\t${parts.map(_.location).mkString("\n\t")}")
             parts
           case _ =>
             throw new RuntimeException(s"No partitions found with filter expression '${config.partFilters}'")
@@ -73,6 +75,7 @@ object SparkJobs {
       } else {
         table.location match {
           case Some(location) =>
+            logger.info(s"Loading '${config.hiveDbName}.${config.hiveTableName}' as non-partitioned table from $location")
             Seq(Partition(Seq.empty, location))
           case _ =>
             throw new RuntimeException("Location not found in table description for non-partitioned table")
@@ -87,8 +90,15 @@ object SparkJobs {
     (it: Iterator[Config]) => loadPartitions(it.next, table, partitions)
 
   def readLocalOrSparkFile(maybePath: scala.Option[String]): scala.Option[Array[Byte]] = {
-    val direct = maybePath.map(Paths.get(_)).filter{_.toFile.exists()}
-    val fromSparkFiles = maybePath.map(SparkFiles.get).map(Paths.get(_)).filter{_.toFile.exists()}
+    val direct = maybePath
+      .map(Paths.get(_))
+      .filter{_.toFile.exists()}
+
+    val fromSparkFiles = maybePath
+      .map(SparkFiles.get)
+      .map(Paths.get(_))
+      .filter{_.toFile.exists}
+
     direct.orElse(fromSparkFiles)
       .map(Files.readAllBytes)
       .filter(_.nonEmpty)
@@ -99,7 +109,7 @@ object SparkJobs {
       keytab <- c.krbKeyTab
       principal <- c.krbPrincipal
     } yield {
-      Kerberos.configureJaas("BQHiveLoader", keytab, principal)
+      Kerberos.configureJaas(keytab, principal)
     }
 
     val writeKeyPath = c.bqWriteKeyFile.orElse(c.bqKeyFile)
@@ -183,23 +193,24 @@ object SparkJobs {
       NativeTableManager.createTable(c, table.schema, destTableId, bigqueryWrite)
     }
 
-    Try(
-      ExternalTableManager.loadParts(project = c.bqProject,
-                                   dataset = c.bqDataset,
-                                   tableName = c.bqTable,
-                                   tableMetadata = table,
-                                   partitions = partitions,
-                                   unusedColumnName = c.unusedColumnName,
-                                   partColFormats = c.partColFormats.toMap,
-                                   storageFormat = storageFormat,
-                                   bigqueryCreate = bigqueryCreate,
-                                   bigqueryWrite = bigqueryWrite,
-                                   overwrite = c.bqOverwrite,
-                                   batch = c.bqBatch,
-                                   gcs = gcs)
-    ) match {
-      case Success(value) =>
-        value
+    val result = Try(ExternalTableManager.loadParts(
+      project = c.bqProject,
+      dataset = c.bqDataset,
+      tableName = c.bqTable,
+      tableMetadata = table,
+      partitions = partitions,
+      unusedColumnName = c.unusedColumnName,
+      partColFormats = c.partColFormats.toMap,
+      storageFormat = storageFormat,
+      bigqueryCreate = bigqueryCreate,
+      bigqueryWrite = bigqueryWrite,
+      overwrite = c.bqOverwrite,
+      batch = c.bqBatch,
+      gcs = gcs))
+
+    result match {
+      case Success(_) =>
+        System.out.println("success")
       case Failure(exception) =>
         throw new RuntimeException(s"failed to load partitions with config:\n$c\n\ntable:\n$table", exception)
     }
