@@ -81,66 +81,40 @@ object JDBCMetaStore extends Logging {
   }
 
   case class ResultSetIterator(private val rs: ResultSet) extends Iterator[Seq[String]] {
-    private val meta = rs.getMetaData
-    private val n = meta.getColumnCount
-    val schema: StructType = {
-      val buf = ArrayBuffer.empty[StructField]
-      for (i <- 0 until n) {
-        buf.append(StructField(meta.getColumnName(i), StringType))
-      }
-      StructType(buf.result().toArray)
-    }
+    private val n = rs.getMetaData.getColumnCount
 
-    override def hasNext: Boolean = nextRow.isDefined
-    private var hasRemaining: Boolean = true
-    private var nextRow: Option[Seq[String]] = read()
+    override def hasNext: Boolean = rs.next()
 
-    private def read(): Option[Seq[String]] = {
-      if (!hasRemaining || !rs.next()) {
-        hasRemaining = false
-        return None
-      }
-      val rows = (0 until n).map{i =>
-        Option(rs.getObject(i+1)).map(_.toString).getOrElse("")
-      }
-      Option(rows)
-    }
-
-    override def next(): Seq[String] = {
-      val result = nextRow
-      nextRow = read()
-      result.orNull
-    }
+    override def next(): Seq[String] =
+      Option((0 until n)
+        .map{i =>
+          Option(rs.getObject(i+1))
+            .map(_.toString)
+            .getOrElse("")
+        }).orNull
   }
 
   case class StatementIterator(stmt: PreparedStatement) extends Iterator[ResultSet] {
-    private var nextResultSet: Option[ResultSet] = read()
-    private var hasRemaining: Boolean = true
-
-    private def read(): Option[ResultSet] = {
-      if (hasRemaining && stmt.getMoreResults) {
-        val rs = Option(stmt.getResultSet)
-        if (rs.isEmpty) hasRemaining = false
-        rs
-      } else None
+    private var rs: ResultSet = _
+    override def hasNext: Boolean = {
+      rs = stmt.getResultSet
+      rs != null
     }
-
-    override def hasNext: Boolean = nextResultSet.isDefined
-
-    override def next(): ResultSet = {
-      val result = nextResultSet
-      nextResultSet = read()
-      result.orNull
-    }
+    override def next(): ResultSet = rs
   }
 
   def executeQueries(queries: Seq[String], con: Connection) : Seq[Seq[Seq[String]]] = {
     val stmt = con.prepareStatement(queries.mkString(";\n\n"))
     if (stmt.execute()) {
+      val buf = ArrayBuffer.empty[Seq[Seq[String]]]
       StatementIterator(stmt)
-        .map{rs =>
-          ResultSetIterator(rs).toArray.toSeq
-        }.toArray.toSeq
+        .takeWhile(_ != null)
+        .foreach{rs =>
+          buf.append(ResultSetIterator(rs)
+            .takeWhile(_ != null)
+            .toArray.toSeq)
+        }
+      buf.result().toArray.toSeq
     } else Seq.empty
   }
 
