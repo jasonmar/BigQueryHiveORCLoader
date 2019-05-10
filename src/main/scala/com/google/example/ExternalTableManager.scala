@@ -16,10 +16,13 @@
 
 package com.google.example
 
+import java.util.{Calendar, Date}
+
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
 import com.google.cloud.bigquery._
 import com.google.cloud.storage.Storage
+import com.google.common.base.Preconditions
 import com.google.example.Mapping.convertStructType
 import com.google.example.MetaStore.{Partition, TableMetadata}
 import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
@@ -306,8 +309,14 @@ object ExternalTableManager {
       val year = colValue.substring(0,4)
       val month = colValue.substring(4,6)
       s"'$year-$month-01' as $colName"
-    } else if (colFormat == "YYYYWW") {
-      s"PARSE_DATE('%Y%U','$colValue') as $colName"
+    } else if (colFormat == "YYYYWW" || colFormat == "%Y%U" || colFormat == "%Y%V" || colFormat == "%Y%W") {
+      Preconditions.checkArgument(colValue.length == 6)
+      val year = colValue.substring(0,4).toInt
+      val week = colValue.substring(4,6).toInt
+      val cal = Calendar.getInstance()
+      cal.setWeekDate(year, week, Calendar.SUNDAY)
+      val date = s"$year-${cal.get(Calendar.MONTH)}-${cal.get(Calendar.DAY_OF_MONTH)}"
+      s"PARSE_DATE('%Y-%m-%d','$date') as $colName"
     } else {
       s"PARSE_DATE('$colFormat','$colValue') as $colName"
     }
