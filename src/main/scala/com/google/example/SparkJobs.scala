@@ -19,6 +19,7 @@ package com.google.example
 import java.io.ByteArrayInputStream
 import java.nio.file.{Files, Paths}
 
+import com.google.api.gax.retrying.RetrySettings
 import com.google.api.gax.rpc.FixedHeaderProvider
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.bigquery._
@@ -27,6 +28,7 @@ import com.google.example.ExternalTableManager.Orc
 import com.google.example.MetaStore._
 import org.apache.spark.SparkFiles
 import org.apache.spark.sql.SparkSession
+import org.threeten.bp.Duration
 
 import scala.util.{Failure, Success, Try}
 
@@ -161,11 +163,24 @@ object SparkJobs extends Logging {
           GoogleCredentials.getApplicationDefault
       }
 
+    val retrySettings = RetrySettings.newBuilder()
+      .setMaxAttempts(0)
+      .setTotalTimeout(Duration.ofHours(24))
+      .setInitialRetryDelay(Duration.ofSeconds(3))
+      .setRetryDelayMultiplier(2.0d)
+      .setMaxRetryDelay(Duration.ofSeconds(300))
+      .setInitialRpcTimeout(Duration.ofSeconds(15))
+      .setRpcTimeoutMultiplier(1.0d)
+      .setMaxRpcTimeout(Duration.ofSeconds(15))
+      .setJittered(false)
+      .build()
+
     val bigqueryCreate: BigQuery = BigQueryOptions.newBuilder()
       .setLocation(c.bqLocation)
       .setCredentials(bqCreateCredentials)
       .setProjectId(c.bqProject)
       .setHeaderProvider(FixedHeaderProvider.create("user-agent", "BQHiveLoader 0.1"))
+      .setRetrySettings(retrySettings)
       .build()
       .getService
 
@@ -174,12 +189,14 @@ object SparkJobs extends Logging {
       .setCredentials(bqWriteCredentials)
       .setProjectId(c.bqProject)
       .setHeaderProvider(FixedHeaderProvider.create("user-agent", "BQHiveLoader 0.1"))
+      .setRetrySettings(retrySettings)
       .build()
       .getService
 
     val gcs: Storage = StorageOptions.newBuilder()
       .setCredentials(storageCreds)
       .setProjectId(c.bqProject)
+      .setRetrySettings(retrySettings)
       .build()
       .getService
 
