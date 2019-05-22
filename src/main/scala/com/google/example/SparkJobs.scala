@@ -43,7 +43,7 @@ object SparkJobs extends Logging {
       .enableHiveSupport
       .getOrCreate()
 
-    logger.info(s"launching with metastore type '${config.hiveMetastoreType}'")
+    logger.info(s"launching with MetaStore type '${config.hiveMetastoreType}'")
     val metaStore = {
       config.hiveMetastoreType match {
         case "jdbc" =>
@@ -57,9 +57,22 @@ object SparkJobs extends Logging {
       }
     }
 
+    for {
+      keytab <- config.krbKeyTab
+      principal <- config.krbPrincipal
+    } yield {
+      Kerberos.configureJaas(keytab, principal)
+    }
+
     runWithMetaStore(config, metaStore, spark)
   }
 
+  /** Reads partitions from MetaStore and launches Spark Job
+    *
+    * @param config
+    * @param metaStore
+    * @param spark
+    */
   def runWithMetaStore(config: Config, metaStore: MetaStore, spark: SparkSession): Unit = {
     val table = metaStore.getTable(config.hiveDbName, config.hiveTableName)
     val partitions: Seq[Partition] =
@@ -88,6 +101,12 @@ object SparkJobs extends Logging {
               func = loadPartitionsJob(table, partitions))
   }
 
+  /** Spark Job
+    *
+    * @param table
+    * @param partitions
+    * @return
+    */
   def loadPartitionsJob(table: TableMetadata, partitions: Seq[Partition]): Iterator[Config] => Unit =
     (it: Iterator[Config]) => loadPartitions(it.next, table, partitions)
 
@@ -106,6 +125,14 @@ object SparkJobs extends Logging {
       .filter(_.nonEmpty)
   }
 
+  /** Spark Job to create external table and create BigQuery load job
+    * The data is not touched, this is launched as a remote job to use
+    * a Service Account Key File located on the worker node.
+    *
+    * @param c
+    * @param table
+    * @param partitions
+    */
   def loadPartitions(c: Config, table: TableMetadata, partitions: Seq[Partition]): Unit = {
     for {
       keytab <- c.krbKeyTab
@@ -122,15 +149,15 @@ object SparkJobs extends Logging {
     val gcsKey = readLocalOrSparkFile(gcsKeyPath)
     writeKeyPath.foreach{p =>
       require(writeKey.isDefined, s"unable to load BigQuery write key from $p")
-      System.out.println(s"loaded BigQuery write key from $p")
+      logger.info(s"loaded BigQuery write key from $p")
     }
     createKeyPath.foreach{p =>
       require(createKey.isDefined, s"unable to load BigQuery create key from $p")
-      System.out.println(s"loaded BigQuery create key from $p")
+      logger.info(s"loaded BigQuery create key from $p")
     }
     gcsKeyPath.foreach{p =>
       require(gcsKey.isDefined, s"unable to load GCS key from $p")
-      System.out.println(s"loaded GCS key from $p")
+      logger.info(s"loaded GCS key from $p")
     }
 
     val bqCreateCredentials: GoogleCredentials =
@@ -205,15 +232,25 @@ object SparkJobs extends Logging {
         .map(ExternalTableManager.parseStorageFormat)
         .getOrElse(Orc)
 
-    val destTableId = TableId.of(c.bqProject, c.bqDataset, c.bqTable)
-    if (!ExternalTableManager.tableExists(destTableId, bigqueryWrite)) {
-      NativeTableManager.createTable(c, table.schema, destTableId, bigqueryWrite)
+    /* Create BigQuery table to be loaded */
+    NativeTableManager.createTableIfNotExists(c.bqProject, c.bqDataset, c.bqTable, c, table.schema, bigqueryWrite)
+
+    val targetDataset = if (c.refreshPartition.nonEmpty) c.tempDataset else c.bqDataset
+
+    val tmpTableName = c.bqTable + "_tmp_" + System.currentTimeMillis().toString
+
+    /* Create temp table if we are refreshing a partition */
+    if (c.refreshPartition.isDefined){
+      NativeTableManager.createTableIfNotExists(c.bqProject, c.tempDataset, tmpTableName, c, table.schema, bigqueryWrite, Some(Duration.ofDays(1).toMillis))
     }
 
+    val targetTable = if (c.refreshPartition.isDefined) tmpTableName else c.bqTable
+
+    /* Submit BigQuery load jobs for each partition */
     val result = Try(ExternalTableManager.loadParts(
       project = c.bqProject,
-      dataset = c.bqDataset,
-      tableName = c.bqTable,
+      dataset = targetDataset,
+      tableName = targetTable,
       tableMetadata = table,
       partitions = partitions,
       unusedColumnName = c.unusedColumnName,
@@ -225,11 +262,22 @@ object SparkJobs extends Logging {
       batch = c.bqBatch,
       gcs = gcs))
 
-    result match {
-      case Success(_) =>
-        System.out.println("success")
-      case Failure(exception) =>
-        throw new RuntimeException(s"failed to load partitions with config:\n$c\n\ntable:\n$table", exception)
+    /* Copy temp table into refresh partition */
+    if (c.refreshPartition.isDefined) {
+      val copyAttempt = NativeTableManager.copyOnto(c.bqProject, c.tempDataset, tmpTableName, c.bqProject, c.bqDataset, c.bqTable, c.refreshPartition, bigqueryWrite)
+      copyAttempt match {
+        case Success(_) =>
+          logger.info("finished refreshing partition")
+        case Failure(exception) =>
+          throw new RuntimeException(s"failed to refresh partition with config:\n$c\n\ntable:\n$table", exception)
+      }
+    } else {
+      result match {
+        case Success(_) =>
+          logger.info("finished loading partitions")
+        case Failure(exception) =>
+          throw new RuntimeException(s"failed to load partitions with config:\n$c\n\ntable:\n$table", exception)
+      }
     }
   }
 }

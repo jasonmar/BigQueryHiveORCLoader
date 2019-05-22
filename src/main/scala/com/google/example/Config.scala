@@ -33,6 +33,20 @@ object Config {
         .action{(x, c) => c.copy(partitionColumn = Option(x.toLowerCase))}
         .text("Partition column name")
 
+      opt[String]("refreshPartition")
+        .action{(x, c) => c.copy(refreshPartition = Option(x))}
+        .text("Partition ID to refresh (Format: YYYYMMDD)")
+        .validate{s =>
+          if (s.matches("""^\d{8}$"""))
+            success
+          else
+            failure(s"refreshPartition '$s' does not match format YYYYMMDD")
+        }
+
+      opt[String]("tempDataset")
+        .action{(x, c) => c.copy(tempDataset = x)}
+        .text("Temporary dataset name")
+
       opt[Seq[String]]("clusterCols")
         .action{(x, c) => c.copy(clusterColumns = x.map(_.toLowerCase))}
         .text("Cluster columns if creating BigQuery table")
@@ -133,6 +147,8 @@ object Config {
           failure("Can't set both bqKeyFile and bqCreateTableKeyFile")
         else if (bqKey && bqWriteKey)
           failure("Can't set both bqKeyFile and bqWriteKeyFile")
+        else if (c.refreshPartition.isDefined && c.tempDataset.isEmpty)
+          failure("must provide tempDataset if with refresh partition")
         else success
       }
     }
@@ -153,6 +169,8 @@ case class Config(partitioned: Boolean = true,
                   bqDataset: String = "",
                   bqTable: String = "",
                   bqLocation: String = "US",
+                  refreshPartition: Option[String] = None,
+                  tempDataset: String = "",
                   bqOverwrite: Boolean = false,
                   bqBatch: Boolean = true,
                   bqKeyFile: Option[String] = None,
