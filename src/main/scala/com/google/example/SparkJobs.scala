@@ -237,7 +237,7 @@ object SparkJobs extends Logging {
 
     val targetDataset = if (c.refreshPartition.nonEmpty) c.tempDataset else c.bqDataset
 
-    val tmpTableName = c.bqTable + "_tmp_" + System.currentTimeMillis().toString
+    val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_" + "_tmp_" + System.currentTimeMillis().toString
 
     /* Create temp table if we are refreshing a partition */
     if (c.refreshPartition.isDefined){
