@@ -88,10 +88,9 @@ object NativeTableManager extends Logging {
       .setWriteDisposition(WriteDisposition.WRITE_TRUNCATE)
       .build()
     val jobInfo = JobInfo.newBuilder(jobConfig).build()
-    if (dryRun) {
-      logger.info(jobInfo.toString)
-      None
-    } else scala.Option(bq.create(jobInfo))
+    logger.info(jobInfo.toString)
+    if (dryRun) None
+    else scala.Option(bq.create(jobInfo))
   }
 
   def createTable(c: Config, schema: StructType, destTableId: TableId, bigquery: BigQuery, expirationMs: scala.Option[Long] = None): Table ={
@@ -100,7 +99,18 @@ object NativeTableManager extends Logging {
     val destTableSchema = if (c.partitionColumn.map(_.toLowerCase).contains("none")) {
       Mapping.convertStructType(schema.add(c.unusedColumnName, DateType))
     } else {
-      Mapping.convertStructType(schema)
+      val hasPartCol = schema
+        .find(_.name.equalsIgnoreCase(c.partitionColumn.get))
+        .exists(_.dataType == DateType)
+      if (hasPartCol)
+        Mapping.convertStructType(schema)
+      else {
+        val fieldsWithoutPartCol = schema
+          .filterNot(_.name.equalsIgnoreCase(c.partitionColumn.get))
+        val withPartCol = StructType(fieldsWithoutPartCol)
+          .add(c.partitionColumn.get, DateType)
+        Mapping.convertStructType(withPartCol)
+      }
     }
 
     val destTableDefBuilder = StandardTableDefinition.newBuilder()
