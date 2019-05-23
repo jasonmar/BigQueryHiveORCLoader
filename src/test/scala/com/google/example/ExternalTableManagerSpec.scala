@@ -23,7 +23,7 @@ import org.apache.spark.sql.types._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
 
-class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
+class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll {
   private var client: Option[BigQuery] = None
 
   val TestSchema = StructType(Seq(
@@ -102,7 +102,8 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll{
       schema,
       locations,
       Orc,
-      getBigQuery)
+      getBigQuery,
+      false)
     System.out.println(createdTable)
   }
 

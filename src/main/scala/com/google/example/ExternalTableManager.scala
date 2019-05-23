@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 
 import scala.util.{Failure, Success, Try}
 
-object ExternalTableManager {
+object ExternalTableManager extends Logging {
   sealed trait StorageFormat
   case object Orc extends StorageFormat
   case object Parquet extends StorageFormat
@@ -56,7 +56,8 @@ object ExternalTableManager {
              schema: Schema,
              sources: Seq[String],
              storageFormat: StorageFormat,
-             bigquery: BigQuery): TableInfo = {
+             bigquery: BigQuery,
+             dryRun: Boolean): TableInfo = {
 
     import scala.collection.JavaConverters.seqAsJavaListConverter
 
@@ -80,8 +81,10 @@ object ExternalTableManager {
       .setExpirationTime(defaultExpiration)
       .build()
 
-    if (!tableExists(tableInfo.getTableId, bigquery))
-      bigquery.create(tableInfo)
+    if (!tableExists(tableInfo.getTableId, bigquery)) {
+      logger.info("Create Table: \n" + tableInfo.toString)
+      if (!dryRun) bigquery.create(tableInfo)
+    }
 
     tableInfo
   }
@@ -150,7 +153,8 @@ object ExternalTableManager {
                           part: Partition,
                           storageFormat: StorageFormat,
                           bigquery: BigQuery,
-                          gcs: Storage): TableInfo = {
+                          gcs: Storage,
+                          dryRun: Boolean): TableInfo = {
     val extTableName = validBigQueryTableName(table + "_" + part.values.mkString("_"))
     val partCols = tableMetadata.partitionColumnNames.toSet
 
@@ -158,7 +162,7 @@ object ExternalTableManager {
 
     val sources = resolveLocations(part, gcs)
     if (sources.nonEmpty)
-      System.out.println(s"Creating external table with sources '${sources.mkString(", ")}'")
+      logger.info(s"Creating external table with sources '${sources.mkString(", ")}'")
     else
       throw new RuntimeException(s"No sources found for ${part.location}")
 
@@ -166,7 +170,8 @@ object ExternalTableManager {
            schema = convertStructType(partSchema),
            sources = sources,
            storageFormat = Orc,
-           bigquery = bigquery)
+           bigquery = bigquery,
+           dryRun = dryRun)
   }
 
   def loadParts(project: String,
@@ -181,14 +186,15 @@ object ExternalTableManager {
                 bigqueryWrite: BigQuery,
                 overwrite: Boolean,
                 batch: Boolean,
-                gcs: Storage): Seq[TableResult] = {
-    partitions.map { part =>
+                gcs: Storage,
+                dryRun: Boolean): Seq[TableResult] = {
+    partitions.flatMap { part =>
       val extTable = createExternalTable(
         project, dataset, tableName,
-        tableMetadata, part, storageFormat, bigqueryCreate, gcs)
+        tableMetadata, part, storageFormat, bigqueryCreate, gcs, dryRun)
 
-      val renameOrcCols = hasOrcPositionalColNames(
-        waitForCreation(extTable.getTableId, timeoutMillis = 120000L, bigqueryCreate))
+      val renameOrcCols = if (!dryRun) hasOrcPositionalColNames(
+        waitForCreation(extTable.getTableId, timeoutMillis = 120000L, bigqueryCreate)) else true
 
       loadPart(
         destTableId = TableId.of(project, dataset, tableName),
@@ -200,7 +206,8 @@ object ExternalTableManager {
         bigqueryWrite = bigqueryWrite,
         batch = batch,
         overwrite = overwrite,
-        renameOrcCols = renameOrcCols)
+        renameOrcCols = renameOrcCols,
+        dryRun = dryRun)
     }
   }
 
@@ -213,7 +220,8 @@ object ExternalTableManager {
                bigqueryWrite: BigQuery,
                overwrite: Boolean = false,
                batch: Boolean = true,
-               renameOrcCols: Boolean = false): TableResult = {
+               renameOrcCols: Boolean = false,
+               dryRun: Boolean = false): scala.Option[TableResult] = {
     // TODO use dest table to provide schema
     val sql = generateSelectFromExternalTable(
       extTable = extTableId,
@@ -233,15 +241,22 @@ object ExternalTableManager {
       .setUseQueryCache(false)
       .build()
 
-    Try(bigqueryWrite.query(query, JobId.newBuilder()
+    val jobId = JobId.newBuilder()
       .setProject(extTableId.getProject)
       .setLocation("US")
       .setJob(jobid(destTableId, partition))
-      .build())) match {
-      case Success(tableResult) =>
-        tableResult
-      case Failure(exception) =>
-        throw new RuntimeException(s"failed to run sql:\n$sql\n\npartition:\n$partition\n\nschema:\n${schema.map(_.toString()).mkString("\n")}", exception)
+      .build()
+
+    if (dryRun){
+      logger.info("QueryJob:\n" + query.toString + "\n\nJobId:\n" + jobId.toString)
+      None
+    } else {
+      Try(bigqueryWrite.query(query, jobId)) match {
+        case Success(tableResult) =>
+          scala.Option(tableResult)
+        case Failure(exception) =>
+          throw new RuntimeException(s"failed to run sql:\n$sql\n\npartition:\n$partition\n\nschema:\n${schema.map(_.toString()).mkString("\n")}", exception)
+      }
     }
   }
 

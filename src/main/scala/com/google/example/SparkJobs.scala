@@ -260,11 +260,12 @@ object SparkJobs extends Logging {
       bigqueryWrite = bigqueryWrite,
       overwrite = c.bqOverwrite,
       batch = c.bqBatch,
-      gcs = gcs))
+      gcs = gcs,
+      dryRun = c.dryRun))
 
     /* Copy temp table into refresh partition */
     if (c.refreshPartition.isDefined) {
-      val copyAttempt = NativeTableManager.copyOnto(c.bqProject, c.tempDataset, tmpTableName, c.bqProject, c.bqDataset, c.bqTable, c.refreshPartition, bigqueryWrite)
+      val copyAttempt = NativeTableManager.copyOnto(c.bqProject, c.tempDataset, tmpTableName, c.bqProject, c.bqDataset, c.bqTable, c.refreshPartition, bigqueryWrite, c.dryRun)
       copyAttempt match {
         case Success(_) =>
           logger.info("finished refreshing partition")

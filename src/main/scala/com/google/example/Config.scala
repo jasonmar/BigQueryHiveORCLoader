@@ -133,6 +133,10 @@ object Config {
         .action{(x, c) => c.copy(krbPrincipal = Option(x))}
         .text("Kerberos principal (user@realm or service/host@realm)")
 
+      opt[Boolean]("dryRun")
+        .action{(x, c) => c.copy(dryRun = x)}
+        .text("When specified, requests are logged and not submitted to BigQuery")
+
       note("Loads Hive external ORC tables into BigQuery")
 
       help("help")
@@ -155,6 +159,7 @@ object Config {
 }
 
 case class Config(partitioned: Boolean = true,
+                  dryRun: Boolean = false,
                   partFilters: String = "",
                   partitionColumn: Option[String] = None,
                   clusterColumns: Seq[String]= Seq.empty,

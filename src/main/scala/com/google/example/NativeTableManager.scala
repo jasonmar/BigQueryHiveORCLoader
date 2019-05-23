@@ -25,7 +25,7 @@ import org.threeten.bp.Duration
 
 import scala.util.{Failure, Success}
 
-object NativeTableManager {
+object NativeTableManager extends Logging {
   def getExistingPartitions(tableId: TableId, bigQuery: BigQuery): TableResult = {
     val tableSpec = tableId.getProject + ":" + tableId.getDataset + "." + tableId.getTable
     tableId.toString + "$__PARTITIONS_SUMMARY__"
@@ -51,37 +51,42 @@ object NativeTableManager {
     } else false
   }
 
-  def copyOnto(srcProject: String, srcDataset: String, srcTable: String, destProject: String, destDataset: String, destTable: String, destPartition: scala.Option[String] = None, bq: BigQuery): scala.util.Try[Job] = {
+  def copyOnto(srcProject: String, srcDataset: String, srcTable: String, destProject: String, destDataset: String, destTable: String, destPartition: scala.Option[String] = None, bq: BigQuery, dryRun: Boolean): scala.util.Try[Job] = {
     val tableWithPartition = destPartition.map(partId => destTable + "$" + partId).getOrElse(destTable)
 
     val srcTableId = TableId.of(srcProject, srcDataset, srcTable)
     val destTableId = TableId.of(destProject, destDataset, tableWithPartition)
 
-    val job = copyOntoTableId(srcTableId, destTableId, bq)
-    val completedJob = scala.Option(job.waitFor(
-      RetryOption.initialRetryDelay(Duration.ofSeconds(8)),
-      RetryOption.maxRetryDelay(Duration.ofSeconds(60)),
-      RetryOption.retryDelayMultiplier(2.0d),
-      RetryOption.totalTimeout(Duration.ofMinutes(120))))
+    val job = copyOntoTableId(srcTableId, destTableId, bq, dryRun)
 
-    completedJob match {
-      case Some(j) =>
-        val error = scala.Option(j.getStatus).map(_.getError)
-        if (error.isDefined)
-          Failure(new RuntimeException(error.get.toString))
-        else Success(j)
-      case _ =>
-        Failure(new RuntimeException("Copy Job doesn't exist"))
-    }
+    if (!dryRun){
+      job.map{_.waitFor(
+        RetryOption.initialRetryDelay(Duration.ofSeconds(8)),
+        RetryOption.maxRetryDelay(Duration.ofSeconds(60)),
+        RetryOption.retryDelayMultiplier(2.0d),
+        RetryOption.totalTimeout(Duration.ofMinutes(120)))
+      } match {
+        case Some(j) =>
+          val error = scala.Option(j.getStatus).map(_.getError)
+          if (error.isDefined)
+            Failure(new RuntimeException(error.get.toString))
+          else Success(j)
+        case _ =>
+          Failure(new RuntimeException("Copy Job doesn't exist"))
+      }
+    } else Success(null)
   }
 
-  def copyOntoTableId(src: TableId, dest: TableId, bq: BigQuery): Job = {
+  def copyOntoTableId(src: TableId, dest: TableId, bq: BigQuery, dryRun: Boolean = false): Option[Job] = {
     val jobConfig = CopyJobConfiguration.newBuilder(dest, src)
       .setCreateDisposition(CreateDisposition.CREATE_NEVER)
       .setWriteDisposition(WriteDisposition.WRITE_TRUNCATE)
       .build()
     val jobInfo = JobInfo.newBuilder(jobConfig).build()
-    bq.create(jobInfo)
+    if (dryRun) {
+      logger.info(jobInfo.toString)
+      None
+    } else scala.Option(bq.create(jobInfo))
   }
 
   def createTable(c: Config, schema: StructType, destTableId: TableId, bigquery: BigQuery, expirationMs: scala.Option[Long] = None): Table ={
