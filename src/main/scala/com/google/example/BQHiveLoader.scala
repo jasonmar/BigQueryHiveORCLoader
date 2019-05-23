@@ -19,6 +19,7 @@ package com.google.example
 
 object BQHiveLoader extends Logging {
   def init(): Unit = {
+    Util.configureLogging()
     Util.quietSparkLogs()
   }
 

@@ -57,7 +57,7 @@ object NativeTableManager extends Logging {
     val srcTableId = TableId.of(srcProject, srcDataset, srcTable)
     val destTableId = TableId.of(destProject, destDataset, tableWithPartition)
 
-    val job = copyOntoTableId(srcTableId, destTableId, bq, dryRun)
+    val job = selectInto(srcTableId, destTableId, bq, dryRun)
 
     if (!dryRun){
       job.map{_.waitFor(
@@ -77,8 +77,13 @@ object NativeTableManager extends Logging {
     } else Success(null)
   }
 
-  def copyOntoTableId(src: TableId, dest: TableId, bq: BigQuery, dryRun: Boolean = false): Option[Job] = {
-    val jobConfig = CopyJobConfiguration.newBuilder(dest, src)
+  def deletePartition(tbl: TableId, partitionId: String, bq: BigQuery): Boolean = {
+    require(partitionId.matches("""^\d{8}$"""), "partitionId must match format YYYYMMDD")
+    bq.delete(TableId.of(tbl.getProject, tbl.getDataset, tbl.getTable + "$" + partitionId))
+  }
+
+  def selectInto(src: TableId, dest: TableId, bq: BigQuery, dryRun: Boolean = false): Option[Job] = {
+    val jobConfig = QueryJobConfiguration.newBuilder(s"select * from `${src.getProject}.${src.getDataset}.${src.getTable}`")
       .setCreateDisposition(CreateDisposition.CREATE_NEVER)
       .setWriteDisposition(WriteDisposition.WRITE_TRUNCATE)
       .build()

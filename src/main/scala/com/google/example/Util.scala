@@ -17,6 +17,7 @@
 package com.google.example
 
 import org.apache.log4j
+import org.apache.log4j.Level
 import org.apache.log4j.Level.{DEBUG, INFO, OFF, WARN}
 
 object Util {
@@ -31,19 +32,24 @@ object Util {
 
   def setLvl(logName: String, level: log4j.Level): Unit = {
     val logger = org.apache.log4j.Logger.getLogger(logName)
-    configureLogger(logger, level, ConsoleAppender)
+    configureLogger(logger, level)
   }
 
   def newLogger(name: String, level: log4j.Level = INFO): org.apache.log4j.Logger = {
     val logger = log4j.Logger.getLogger(name)
-    configureLogger(logger, level, ConsoleAppender)
+    configureLogger(logger, level)
     logger
   }
 
-  def configureLogger(logger: log4j.Logger, level: log4j.Level, appender: log4j.Appender): log4j.Logger = {
+  def configureLogger(logger: log4j.Logger, level: log4j.Level): log4j.Logger = {
     logger.setLevel(level)
-    logger.addAppender(appender)
     logger
+  }
+
+  def configureLogging(): Unit = {
+    val rootLogger = org.apache.log4j.Logger.getRootLogger
+    rootLogger.addAppender(ConsoleAppender)
+    rootLogger.setLevel(Level.INFO)
   }
 
   def quietSparkLogs(): Unit = {
