@@ -82,7 +82,7 @@ object NativeTableManager extends Logging {
     bq.delete(TableId.of(tbl.getProject, tbl.getDataset, tbl.getTable + "$" + partitionId))
   }
 
-  def selectInto(src: TableId, dest: TableId, bq: BigQuery, dryRun: Boolean = false): Option[Job] = {
+  def selectInto(src: TableId, dest: TableId, bq: BigQuery, dryRun: Boolean = false): scala.Option[Job] = {
     val jobConfig = QueryJobConfiguration.newBuilder(s"select * from `${src.getProject}.${src.getDataset}.${src.getTable}`")
       .setCreateDisposition(CreateDisposition.CREATE_NEVER)
       .setWriteDisposition(WriteDisposition.WRITE_TRUNCATE)
