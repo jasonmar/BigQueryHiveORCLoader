@@ -45,11 +45,24 @@ class PartitionsFiltersSpec extends FlatSpec {
 
   it should "reject" in {
     assert(Equals("date", "2019-04-11").reject("date", "2019-04-10"))
+    assert(Equals("date", "2019-04-11").accept("date", "2019-04-11"))
     assert(GreaterThan("date", "2019-04-11").reject("date", "2019-04-11"))
+    assert(GreaterThan("date", "2019-04-11").reject("date", "2019-04-10"))
     assert(LessThan("date", "2019-04-15").reject("date", "2019-04-15"))
+    assert(LessThan("date", "2019-04-15").reject("date", "2019-04-16"))
     assert("2019-04-15" <= "2019-04-16")
     assert(LessThanOrEq("date", "2019-04-15").reject("date", "2019-04-16"))
+    assert(LessThanOrEq("date", "2019-04-15").accept("date", "2019-04-15"))
     assert(GreaterThanOrEq("date", "2019-04-11").reject("date", "2019-04-10"))
+    assert(GreaterThanOrEq("date", "2019-04-11").accept("date", "2019-04-11"))
+    assert(LessThanOrEq("id", "15").reject("id", "16"))
+    assert(LessThanOrEq("id", "15").accept("id", "15"))
+    assert(GreaterThanOrEq("id", "11").reject("id", "10"))
+    assert(GreaterThanOrEq("id", "11").accept("id", "11"))
+    assert(LessThanOrEq("id", "a").reject("id", "b"))
+    assert(LessThanOrEq("id", "a").accept("id", "a"))
+    assert(GreaterThanOrEq("id", "b").reject("id", "a"))
+    assert(GreaterThanOrEq("id", "b").accept("id", "b"))
   }
 
 }

@@ -49,61 +49,49 @@ object PartitionFilters {
 
   sealed trait FilterExpression {
     val l: String
-    def apply(column: String, value: String): Boolean
-    def reject(column: String, value: String): Boolean = !apply(column, value)
+    def accept(column: String, value: String): Boolean
+    def reject(column: String, value: String): Boolean = !accept(column, value)
   }
 
   case object MatchAll extends FilterExpression {
     override val l: String = "*"
-    override def apply(column: String, value: String): Boolean =
+    override def accept(column: String, value: String): Boolean =
       true
   }
 
   case class Equals(l: String, r: String) extends FilterExpression {
-    override def apply(column: String, value: String): Boolean = {
+    override def accept(column: String, value: String): Boolean =
       l == column && (r == "*" || r == value)
-    }
   }
 
   case class GreaterThan(l: String, r: String) extends FilterExpression {
-    override def apply(column: String, value: String): Boolean = {
-      l == column && r > value
-    }
+    override def accept(column: String, value: String): Boolean =
+      l == column && r < value
   }
 
   case class LessThan(l: String, r: String) extends FilterExpression {
-    override def apply(column: String, value: String): Boolean = {
-      l == column && r < value
-    }
+    override def accept(column: String, value: String): Boolean =
+      l == column && r > value
   }
 
   case class GreaterThanOrEq(l: String, r: String) extends FilterExpression {
-    override def apply(column: String, value: String): Boolean = {
-      if (isDate(r))
-        l == column && r <= value
-      else
-        l == column && r >= value
-    }
+    override def accept(column: String, value: String): Boolean =
+      l == column && r <= value
   }
 
   def isDate(s: String): Boolean = {
-    if ((s.length <= 10 && s.length >= 8) && s.count(_ == '-') == 2) true
+    if (s.matches("""^\d{4}-\d{2}-\d{2}$""")) true
     else false
   }
 
   case class LessThanOrEq(l: String, r: String) extends FilterExpression {
-    override def apply(column: String, value: String): Boolean = {
-      if (isDate(r))
-        l == column && r >= value
-      else
-        l == column && r <= value
-    }
+    override def accept(column: String, value: String): Boolean =
+      l == column && r >= value
   }
 
   case class In(l: String, r: Set[String]) extends FilterExpression {
-    override def apply(column: String, value: String): Boolean = {
+    override def accept(column: String, value: String): Boolean =
       l == column && r.contains(value)
-    }
   }
 
   def parse(expr: String): Option[PartitionFilter] = {
