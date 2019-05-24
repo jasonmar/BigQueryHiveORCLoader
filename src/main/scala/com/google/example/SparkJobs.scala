@@ -39,6 +39,7 @@ object SparkJobs extends Logging {
   def run(config: Config): Unit = {
     val spark = SparkSession
       .builder()
+      .config("spark.yarn.maxAppAttempts","1")
       .appName("BQHiveORCLoader")
       .enableHiveSupport
       .getOrCreate()
@@ -223,6 +224,7 @@ object SparkJobs extends Logging {
     val gcs: Storage = StorageOptions.newBuilder()
       .setCredentials(storageCreds)
       .setProjectId(c.bqProject)
+      .setHeaderProvider(FixedHeaderProvider.create("user-agent", "BQHiveLoader 0.1"))
       .setRetrySettings(retrySettings)
       .build()
       .getService
@@ -237,7 +239,7 @@ object SparkJobs extends Logging {
 
     val targetDataset = if (c.refreshPartition.nonEmpty) c.tempDataset else c.bqDataset
 
-    val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_" + "_tmp_" + System.currentTimeMillis().toString
+    val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_" + "_tmp_" + (System.currentTimeMillis()/1000L).toString
 
     /* Create temp table if we are refreshing a partition */
     if (c.refreshPartition.isDefined){
@@ -265,7 +267,7 @@ object SparkJobs extends Logging {
 
     /* Copy temp table into refresh partition */
     if (c.refreshPartition.isDefined) {
-      val copyAttempt = NativeTableManager.copyOnto(c.bqProject, c.tempDataset, tmpTableName, c.bqProject, c.bqDataset, c.bqTable, c.refreshPartition, bigqueryWrite, c.dryRun)
+      val copyAttempt = NativeTableManager.copyOnto(c.bqProject, c.tempDataset, tmpTableName, c.bqProject, c.bqDataset, c.bqTable, destPartition = c.refreshPartition, bq = bigqueryWrite, dryRun = c.dryRun, batch = c.bqBatch)
       copyAttempt match {
         case Success(_) =>
           logger.info("finished refreshing partition")

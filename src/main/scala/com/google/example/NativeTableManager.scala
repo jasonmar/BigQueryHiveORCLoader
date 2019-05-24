@@ -51,13 +51,13 @@ object NativeTableManager extends Logging {
     } else false
   }
 
-  def copyOnto(srcProject: String, srcDataset: String, srcTable: String, destProject: String, destDataset: String, destTable: String, destPartition: scala.Option[String] = None, bq: BigQuery, dryRun: Boolean): scala.util.Try[Job] = {
+  def copyOnto(srcProject: String, srcDataset: String, srcTable: String, destProject: String, destDataset: String, destTable: String, destPartition: scala.Option[String] = None, bq: BigQuery, dryRun: Boolean, batch: Boolean): scala.util.Try[Job] = {
     val tableWithPartition = destPartition.map(partId => destTable + "$" + partId).getOrElse(destTable)
 
     val srcTableId = TableId.of(srcProject, srcDataset, srcTable)
     val destTableId = TableId.of(destProject, destDataset, tableWithPartition)
 
-    val job = selectInto(srcTableId, destTableId, bq, dryRun)
+    val job = selectInto(srcTableId, destTableId, bq, dryRun, batch)
 
     if (!dryRun){
       job.map{_.waitFor(
@@ -82,10 +82,18 @@ object NativeTableManager extends Logging {
     bq.delete(TableId.of(tbl.getProject, tbl.getDataset, tbl.getTable + "$" + partitionId))
   }
 
-  def selectInto(src: TableId, dest: TableId, bq: BigQuery, dryRun: Boolean = false): scala.Option[Job] = {
-    val jobConfig = QueryJobConfiguration.newBuilder(s"select * from `${src.getProject}.${src.getDataset}.${src.getTable}`")
+  def selectInto(src: TableId, dest: TableId, bq: BigQuery, dryRun: Boolean = false, batch: Boolean = false): scala.Option[Job] = {
+    val query = s"select * from `${src.getProject}.${src.getDataset}.${src.getTable}`"
+    val jobConfig = QueryJobConfiguration
+      .newBuilder(query)
       .setCreateDisposition(CreateDisposition.CREATE_NEVER)
       .setWriteDisposition(WriteDisposition.WRITE_TRUNCATE)
+      .setDestinationTable(dest)
+      .setAllowLargeResults(true)
+      .setDryRun(dryRun)
+      .setUseLegacySql(false)
+      .setUseQueryCache(false)
+      .setPriority(if (batch) Priority.BATCH else Priority.INTERACTIVE)
       .build()
     val jobInfo = JobInfo.newBuilder(jobConfig).build()
     logger.info(jobInfo.toString)
