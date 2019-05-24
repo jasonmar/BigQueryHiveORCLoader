@@ -127,7 +127,13 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll {
     import ExternalTableManager._
     val fmt = "%Y%U"
     val fmt2 = "YYYYWW"
-    assert(getAsDate("201902", fmt) == "2019-01-06")
+    val fmt3 = "%Y%V"
+    assert(getAsDate("201900", fmt) == "2018-12-30")
+    assert(getAsDate("201901", fmt) == "2019-01-06")
+    assert(getAsDate("201902", fmt) == "2019-01-13")
     assert(getAsDate("201901", fmt2) == "2018-12-30")
+    assert(getAsDate("201902", fmt2) == "2019-01-06")
+    assert(getAsDate("201901", fmt3) == "2018-12-31")
+    assert(getAsDate("201701", fmt3) == "2017-01-09")
   }
 }

@@ -332,16 +332,34 @@ object ExternalTableManager extends Logging {
     }
   }
 
+  def jan1dow(y: Int): Int = {
+    val cal = Calendar.getInstance()
+    cal.set(y, 0, 1)
+    cal.get(Calendar.DAY_OF_WEEK)
+  }
+
   def getAsDate(s: String, fmt: String): String = {
     if (fmt == "YYYYWW" || fmt == "%Y%U" || fmt == "%Y%V" || fmt == "%Y%W") {
       Preconditions.checkArgument(s.matches("""^\d{6}$"""))
       val y = s.substring(0,4).toInt
       val week = s.substring(4,6).toInt
       val cal = Calendar.getInstance()
-      if (fmt == "%Y%V" || fmt == "%Y%W")
+      if (fmt == "%Y%V") {
+        // %V	The week number of the year (Monday as the first day of the week) as a decimal number (01-53). If the week containing January 1 has four or more days in the new year, then it is week 1; otherwise it is week 53 of the previous year, and the next week is week 1.
+        val jan1 = jan1dow(y)
+        if (jan1 == Calendar.FRIDAY || jan1 == Calendar.SATURDAY || jan1 == Calendar.SUNDAY) {
+          cal.setWeekDate(y, week+1, Calendar.MONDAY)
+        } else
+          cal.setWeekDate(y, week, Calendar.MONDAY)
+      } else if (fmt == "%Y%W")
         cal.setWeekDate(y, week, Calendar.MONDAY)
-      else
+      else if (fmt == "%Y%U") {
+        // %U	The week number of the year (Sunday as the first day of the week) as a decimal number (00-53).
+        cal.setWeekDate(y, week+1, Calendar.SUNDAY)
+      } else if (fmt == "YYYYWW") {
+        // Week (01-53) (Sunday as the first day of the week)
         cal.setWeekDate(y, week, Calendar.SUNDAY)
+      }
       val year = cal.get(Calendar.YEAR)
       val month = f"${cal.get(Calendar.MONTH)+1}%02d"
       val day = f"${cal.get(Calendar.DAY_OF_MONTH)}%02d"
