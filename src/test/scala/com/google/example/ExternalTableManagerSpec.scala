@@ -122,4 +122,12 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll {
       batch = false
     )
   }
+
+  it should "parse date format" in {
+    import ExternalTableManager._
+    val fmt = "%Y%U"
+    val fmt2 = "YYYYWW"
+    assert(getAsDate("201902", fmt) == "2019-01-06")
+    assert(getAsDate("201901", fmt2) == "2018-12-30")
+  }
 }

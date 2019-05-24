@@ -321,20 +321,32 @@ object ExternalTableManager extends Logging {
     */
   def format(colName: String, colValue: String, colFormat: String): String = {
     if (colFormat == "YYYYMM") {
-      val year = colValue.substring(0,4)
-      val month = colValue.substring(4,6)
-      s"'$year-$month-01' as $colName"
+      require(colValue.matches("""^\d{6}$"""))
+      val y = colValue.substring(0,4)
+      val m = colValue.substring(4,6)
+      s"'$y-$m-01' as $colName"
     } else if (colFormat == "YYYYWW" || colFormat == "%Y%U" || colFormat == "%Y%V" || colFormat == "%Y%W") {
-      Preconditions.checkArgument(colValue.length == 6)
-      val year = colValue.substring(0,4).toInt
-      val week = colValue.substring(4,6).toInt
-      val cal = Calendar.getInstance()
-      cal.setWeekDate(year, week, Calendar.SUNDAY)
-      val date = s"$year-${cal.get(Calendar.MONTH)}-${cal.get(Calendar.DAY_OF_MONTH)}"
-      s"PARSE_DATE('%Y-%m-%d','$date') as $colName"
+      s"PARSE_DATE('%Y-%m-%d','${getAsDate(colValue, colFormat)}') as $colName"
     } else {
       s"PARSE_DATE('$colFormat','$colValue') as $colName"
     }
+  }
+
+  def getAsDate(s: String, fmt: String): String = {
+    if (fmt == "YYYYWW" || fmt == "%Y%U" || fmt == "%Y%V" || fmt == "%Y%W") {
+      Preconditions.checkArgument(s.matches("""^\d{6}$"""))
+      val y = s.substring(0,4).toInt
+      val week = s.substring(4,6).toInt
+      val cal = Calendar.getInstance()
+      if (fmt == "%Y%V" || fmt == "%Y%W")
+        cal.setWeekDate(y, week, Calendar.MONDAY)
+      else
+        cal.setWeekDate(y, week, Calendar.SUNDAY)
+      val year = cal.get(Calendar.YEAR)
+      val month = f"${cal.get(Calendar.MONTH)+1}%02d"
+      val day = f"${cal.get(Calendar.DAY_OF_MONTH)}%02d"
+      s"$year-$month-$day"
+    } else ""
   }
 
   def generateSelectFromExternalTable(extTable: TableId,
