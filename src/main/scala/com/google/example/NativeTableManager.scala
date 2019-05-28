@@ -67,10 +67,10 @@ object NativeTableManager extends Logging {
         RetryOption.totalTimeout(Duration.ofMinutes(120)))
       } match {
         case Some(j) =>
-          val error = scala.Option(j.getStatus).map(_.getError)
-          if (error.isDefined)
-            Failure(new RuntimeException(error.get.toString))
-          else Success(j)
+          val error = scala.Option(j.getStatus).flatMap(x => scala.Option(x.getError))
+          error
+            .map(e => Failure(new RuntimeException(e.toString)))
+            .getOrElse(Success(j))
         case _ =>
           Failure(new RuntimeException("Copy Job doesn't exist"))
       }
