@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.example
+package com.google.cloud.bqhiveloader
 
-import com.google.example.PartitionFilters._
+import com.google.cloud.bqhiveloader.PartitionFilters._
 import org.scalatest.FlatSpec
 
 class PartitionsFiltersSpec extends FlatSpec {

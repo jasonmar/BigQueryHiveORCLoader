@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-package com.google.example
+package com.google.cloud.bqhiveloader
 
-import java.util.{Calendar, Date}
+import java.util.Calendar
 
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
 import com.google.cloud.bigquery._
+import com.google.cloud.bqhiveloader.Mapping.convertStructType
+import com.google.cloud.bqhiveloader.MetaStore.{Partition, TableMetadata}
 import com.google.cloud.storage.Storage
 import com.google.common.base.Preconditions
-import com.google.example.Mapping.convertStructType
-import com.google.example.MetaStore.{Partition, TableMetadata}
 import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 
 import scala.util.{Failure, Success, Try}

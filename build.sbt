@@ -22,7 +22,6 @@ scalaVersion := "2.11.11"
 
 val sparkVersion = "2.3.0"
 
-val exHadoop = ExclusionRule("org.apache.hadoop")
 val exGuava = ExclusionRule("com.google.guava")
 
 libraryDependencies ++= Seq(
@@ -40,12 +39,14 @@ libraryDependencies ++= Seq(
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.4" % "test"
 
-mainClass in assembly := Some("com.google.cloud.example.BQHiveLoader")
+mainClass in assembly := Some("com.google.cloud.bqhiveloader.BQHiveLoader")
 
 assemblyMergeStrategy in assembly := {
   case PathList("META-INF", _) => MergeStrategy.discard
   case _ => MergeStrategy.first
 }
+
+assemblyJarName in assembly := "bqhiveloader.jar"
 
 assemblyShadeRules in assembly := Seq(
   ShadeRule.rename("com.google.common.**" -> "s.guava.@1").inAll,

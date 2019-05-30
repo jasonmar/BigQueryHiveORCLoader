@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.example
+package com.google.cloud.bqhiveloader
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.types._

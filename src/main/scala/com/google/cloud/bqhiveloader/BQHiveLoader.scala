@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.example
-
+package com.google.cloud.bqhiveloader
 
 object BQHiveLoader extends Logging {
   def init(): Unit = {

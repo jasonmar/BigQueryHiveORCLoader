@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.example
+package com.google.cloud.bqhiveloader
 
-import com.google.example.PartitionFilters.PartitionFilter
+import com.google.cloud.bqhiveloader.PartitionFilters.PartitionFilter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SparkSession}
 

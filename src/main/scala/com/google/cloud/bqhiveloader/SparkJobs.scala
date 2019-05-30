@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.example
+package com.google.cloud.bqhiveloader
 
 import java.io.ByteArrayInputStream
 import java.nio.file.{Files, Paths}
@@ -23,9 +23,9 @@ import com.google.api.gax.retrying.RetrySettings
 import com.google.api.gax.rpc.FixedHeaderProvider
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.bigquery._
+import com.google.cloud.bqhiveloader.ExternalTableManager.Orc
+import com.google.cloud.bqhiveloader.MetaStore._
 import com.google.cloud.storage.{Storage, StorageOptions}
-import com.google.example.ExternalTableManager.Orc
-import com.google.example.MetaStore._
 import org.apache.spark.SparkFiles
 import org.apache.spark.sql.SparkSession
 import org.threeten.bp.Duration

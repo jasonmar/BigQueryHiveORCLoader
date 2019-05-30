@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.example
+package com.google.cloud.bqhiveloader
 
 import com.google.cloud.RetryOption
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}

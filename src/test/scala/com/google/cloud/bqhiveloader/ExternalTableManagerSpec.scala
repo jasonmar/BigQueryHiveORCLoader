@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.example
+package com.google.cloud.bqhiveloader
 
 import com.google.cloud.bigquery.{BigQuery, BigQueryOptions, StandardTableDefinition, TableId, TableInfo}
-import com.google.example.ExternalTableManager.Orc
-import com.google.example.MetaStore.Partition
+import com.google.cloud.bqhiveloader.ExternalTableManager.Orc
+import com.google.cloud.bqhiveloader.MetaStore.Partition
 import org.apache.spark.sql.types._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 

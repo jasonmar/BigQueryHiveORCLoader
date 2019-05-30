@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.example
+package com.google.cloud.bqhiveloader
 
-import com.google.example.MetaStore.Partition
+import com.google.cloud.bqhiveloader.MetaStore.Partition
 
 object PartitionFilters {
   case class PartitionFilter(expressions: Seq[FilterExpression]) {
