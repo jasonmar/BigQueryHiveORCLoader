@@ -21,21 +21,23 @@ object Config {
     new scopt.OptionParser[Config]("BQHiveLoader") {
       head("BQHiveLoader", "0.1")
 
+      note("BigQuery Hive Loader is a command-line utility for loading Hive partitions into BigQuery\n")
+
       opt[Boolean]("partitioned")
         .action{(x, c) => c.copy(partitioned = x, partFilters = "*")}
-        .text("flag indicating that table is not partitioned")
+        .text("(optional) flag indicating that table is not partitioned (default: true)")
 
       opt[String]("partFilters")
         .action{(x, c) => c.copy(partFilters = x)}
-        .text("Partition filter expression specified as date > 2019-04-18 AND region IN (A,B,C) AND part = *")
+        .text("(optional) Partition filter expression. Example: 'date > 2019-04-18 AND region IN (A,B,C) AND part = *'")
 
       opt[String]("partitionColumn")
         .action{(x, c) => c.copy(partitionColumn = Option(x.toLowerCase))}
-        .text("Partition column name")
+        .text("(optional) Partition column name (default: None)")
 
       opt[String]("refreshPartition")
         .action{(x, c) => c.copy(refreshPartition = Option(x))}
-        .text("Partition ID to refresh (Format: YYYYMMDD)")
+        .text("BigQuery partition ID to refresh, formatted YYYYMMDD (default: None)")
         .validate{s =>
           if (s.matches("""^\d{8}$"""))
             success
@@ -45,37 +47,37 @@ object Config {
 
       opt[String]("tempDataset")
         .action{(x, c) => c.copy(tempDataset = x)}
-        .text("Temporary dataset name")
+        .text("Temporary BigQuery Dataset name where Hive partitions will be stored prior to select into the refresh partition (required if refreshPartition is set)")
 
       opt[Seq[String]]("clusterCols")
         .action{(x, c) => c.copy(clusterColumns = x.map(_.toLowerCase))}
-        .text("Cluster columns if creating BigQuery table")
+        .text("(optional) Cluster columns if creating BigQuery table (default: None)")
 
       opt[Map[String,String]]("partColFormats")
         .action{(x, c) => c.copy(partColFormats = x.toSeq)}
-        .text("Partition Column Formats to parse int or string as date (example: 'date=%Y-%m-%d,month=YYYYMM')")
+        .text("(optional) Partition Column format to be used to parse INTEGER or STRING type partition column as DATE. Provided as comma separated key/value pairs col=fmt. Example: 'date=%Y-%m-%d,month=YYYYMM' (default: None)")
 
       opt[String]("hiveJdbcUrl")
         .action{(x, c) => c.copy(hiveJdbcUrl = x)}
-        .text("Hive JDBC URL")
+        .text("Hive JDBC connection string (required)")
 
       opt[String]("hiveDbName")
         .required()
         .action{(x, c) => c.copy(hiveDbName = x)}
-        .text("Hive source database name")
+        .text("Hive database name containing partitions to be loaded (required)")
 
       opt[String]("hiveTableName")
         .required()
         .action{(x, c) => c.copy(hiveTableName = x)}
-        .text("Hive source table name")
+        .text("Hive table name containing partitions to be loaded (required)")
 
       opt[String]("hiveMetastoreType")
         .action{(x, c) => c.copy(hiveMetastoreType = x)}
-        .text("Hive Metastore type (default: jdbc)")
+        .text("(optional) Hive Metastore type (default: jdbc)")
 
       opt[String]("hiveStorageFormat")
         .action{(x, c) => c.copy(hiveStorageFormat = Option(x))}
-        .text("Hive storage format (default: orc)")
+        .text("(optional) Hive storage format (default: orc)")
         .validate{s =>
           if (!Set("orc", "parquet", "avro").contains(s.toLowerCase))
             failure(s"unrecognized storage format '$s'")
@@ -85,59 +87,57 @@ object Config {
       opt[String]("bqProject")
         .required()
         .action{(x, c) => c.copy(bqProject = x)}
-        .text("BigQuery destination project")
+        .text("BigQuery destination project (required)")
 
       opt[String]("bqDataset")
         .required()
         .action{(x, c) => c.copy(bqDataset = x)}
-        .text("BigQuery destination dataset")
+        .text("BigQuery destination dataset (required)")
 
       opt[String]("bqTable")
         .required()
         .action{(x, c) => c.copy(bqTable = x)}
-        .text("BigQuery destination table")
+        .text("BigQuery destination table (required)")
 
       opt[String]("bqKeyFile")
         .action{(x, c) => c.copy(bqKeyFile = Option(x))}
-        .text("BigQuery keyfile path")
+        .text("(optional) BigQuery keyfile path for all BigQuery operations. Ignored if bqCreateTableKeyFile and bqWriteKeyFile are provided")
 
       opt[String]("bqCreateTableKeyFile")
         .action{(x, c) => c.copy(bqCreateTableKeyFile = Option(x))}
-        .text("BigQuery keyfile path for external table creation")
+        .text("BigQuery keyfile path for external table creation. (required if bqKeyFile not set)")
 
       opt[String]("bqWriteKeyFile")
         .action{(x, c) => c.copy(bqWriteKeyFile = Option(x))}
-        .text("BigQuery keyfile path for write to destination table")
+        .text("BigQuery keyfile path for write to destination table. (required if bqKeyFile not set)")
 
       opt[String]("bqLocation")
         .action{(x, c) => c.copy(bqLocation = x)}
-        .text("BigQuery Location (default: US)")
+        .text("(optional) BigQuery Location (default: US)")
 
       opt[Boolean]( "bqOverwrite")
         .action{(x, c) => c.copy(bqOverwrite = x)}
-        .text("BigQuery overwrite flag - WARNING: ALL data in the table will be deleted (default: false)")
+        .text("(optional) BigQuery overwrite flag. Ignored if refreshPartition is set. WARNING: ALL data in the table will be deleted. (default: false)")
 
       opt[Boolean]( "bqBatch")
         .action{(x, c) => c.copy(bqBatch = x)}
-        .text("BigQuery batch mode flag (default: true)")
+        .text("(optional) BigQuery batch mode flag. Enable to allow BigQuery to manage Job concurrency level. Disable to cause jobs to be run immediately. (default: true)")
 
       opt[String]("gcsKeyFile")
         .action{(x, c) => c.copy(gcsKeyFile = Option(x))}
-        .text("GCS keyfile path for object listing")
+        .text("GCS keyfile path for object listing (required)")
 
       opt[String]("krbKeyTab")
         .action{(x, c) => c.copy(krbKeyTab = Option(x))}
-        .text("Kerberos keytab location (path/to/krb5.keytab)")
+        .text("(optional) Kerberos keytab location (path/to/krb5.keytab)")
 
       opt[String]("krbPrincipal")
         .action{(x, c) => c.copy(krbPrincipal = Option(x))}
-        .text("Kerberos principal (user@realm or service/host@realm)")
+        .text("(optional) Kerberos principal (user@realm or service/host@realm)")
 
       opt[Boolean]("dryRun")
         .action{(x, c) => c.copy(dryRun = x)}
-        .text("When specified, requests are logged and not submitted to BigQuery")
-
-      note("Loads Hive external ORC tables into BigQuery")
+        .text("(optional) When specified, requests are logged and not submitted to BigQuery (default: false)")
 
       help("help")
         .text("prints this usage text")
