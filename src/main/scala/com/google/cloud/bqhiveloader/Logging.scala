@@ -16,10 +16,10 @@
 
 package com.google.cloud.bqhiveloader
 
-import org.apache.log4j.Logger
+import org.apache.log4j.{LogManager, Logger}
 
 
 trait Logging {
   @transient
-  protected lazy val logger: Logger = Util.newLogger(this.getClass.getCanonicalName.stripSuffix("$"))
+  protected lazy val logger: Logger = LogManager.getLogger(this.getClass)
 }

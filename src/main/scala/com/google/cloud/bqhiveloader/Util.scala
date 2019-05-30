@@ -16,61 +16,47 @@
 
 package com.google.cloud.bqhiveloader
 
-import org.apache.log4j
-import org.apache.log4j.Level
-import org.apache.log4j.Level.{DEBUG, INFO, OFF, WARN}
+import org.apache.log4j.{Level, LogManager, PatternLayout, ConsoleAppender}
 
 object Util {
-  val DefaultLayout = new log4j.PatternLayout("%d{ISO8601} [%t] %-5p %c %x - %m%n")
-  val ConsoleAppender = new log4j.ConsoleAppender(DefaultLayout)
+  val DefaultLayout = new PatternLayout("%d{ISO8601} [%t] %-5p %c %x - %m%n")
 
-  def setDebug(logName: String): Unit = setLvl(logName, DEBUG)
+  def setDebug(logName: String): Unit = setLvl(logName, Level.DEBUG)
 
-  def setWarn(logName: String): Unit = setLvl(logName, WARN)
+  def setWarn(logName: String): Unit = setLvl(logName, Level.WARN)
 
-  def setOff(logName: String): Unit = setLvl(logName, OFF)
+  def setOff(logName: String): Unit = setLvl(logName, Level.OFF)
 
-  def setLvl(logName: String, level: log4j.Level): Unit = {
-    val logger = org.apache.log4j.Logger.getLogger(logName)
-    configureLogger(logger, level)
-  }
-
-  def newLogger(name: String, level: log4j.Level = INFO): org.apache.log4j.Logger = {
-    val logger = log4j.Logger.getLogger(name)
-    configureLogger(logger, level)
-    logger
-  }
-
-  def configureLogger(logger: log4j.Logger, level: log4j.Level): log4j.Logger = {
-    logger.setLevel(level)
-    logger
-  }
+  def setLvl(logName: String, level: Level): Unit =
+    LogManager.getLogger(logName).setLevel(level)
 
   def configureLogging(): Unit = {
-    val rootLogger = org.apache.log4j.Logger.getRootLogger
-    rootLogger.addAppender(ConsoleAppender)
+    val rootLogger = LogManager.getRootLogger
+    rootLogger.addAppender(new ConsoleAppender(DefaultLayout))
     rootLogger.setLevel(Level.INFO)
   }
 
   def quietSparkLogs(): Unit = {
     Util.setDebug("com.google.cloud.example")
-    Util.setWarn("org.apache.orc.impl.MemoryManagerImpl")
-    Util.setWarn("org.apache.spark.network.netty")
-    Util.setWarn("org.apache.spark.executor.Executor")
-    Util.setWarn("org.apache.spark.scheduler")
-    Util.setWarn("org.apache.spark.SparkEnv")
-    Util.setWarn("org.apache.spark.sql.catalyst.expressions.codegen")
-    Util.setWarn("org.apache.spark.sql.execution")
-    Util.setWarn("org.apache.spark.sql.internal.SharedState")
-    Util.setWarn("org.apache.spark.SecurityManager")
-    Util.setWarn("org.apache.spark.storage.BlockManager")
-    Util.setWarn("org.apache.spark.storage.BlockManagerInfo")
-    Util.setWarn("org.apache.spark.storage.BlockManagerMaster")
-    Util.setWarn("org.apache.spark.storage.BlockManagerMasterEndpoint")
-    Util.setWarn("org.apache.spark.storage.DiskBlockManager")
-    Util.setWarn("org.apache.spark.storage.memory.MemoryStore")
-    Util.setWarn("org.apache.spark.ui")
-    Util.setWarn("org.apache.spark.util")
+    Seq(
+      "org.apache.orc.impl.MemoryManagerImpl",
+      "org.apache.spark.network.netty",
+      "org.apache.spark.executor.Executor",
+      "org.apache.spark.scheduler",
+      "org.apache.spark.SparkEnv",
+      "org.apache.spark.sql.catalyst.expressions.codegen",
+      "org.apache.spark.sql.execution",
+      "org.apache.spark.sql.internal.SharedState",
+      "org.apache.spark.SecurityManager",
+      "org.apache.spark.storage.BlockManager",
+      "org.apache.spark.storage.BlockManagerInfo",
+      "org.apache.spark.storage.BlockManagerMaster",
+      "org.apache.spark.storage.BlockManagerMasterEndpoint",
+      "org.apache.spark.storage.DiskBlockManager",
+      "org.apache.spark.storage.memory.MemoryStore",
+      "org.apache.spark.ui",
+      "org.apache.spark.util"
+    ).foreach(Util.setWarn)
     Util.setOff("org.apache.hadoop.util.NativeCodeLoader")
   }
 }
