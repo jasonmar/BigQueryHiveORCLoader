@@ -82,13 +82,16 @@ spark-submit \
 
 ### Partition Column
 
+Column to be used as BigQuery partition column.
+
 Specified by `--partitionColumn` command-line argument.
 
-This specifies the name of the column that will be used as BigQuery partition column.
-If the Hive column is not a string with format YYYY-MM-DD, a partition format must also be specified to indicate to the utility how to convert the column to a date.    
+If the Hive column is not a string with format `YYYY-MM-DD`, a partition format must also be specified to indicate to the utility how to convert the column to a date.
 
 
 ### Partition Column Formats
+
+Format strings to be used to parse Hive partition column values as date.
 
 Provided by `--partColFormats` command-line argument followed by comma separated key/value pairs. Quoting is recommended but not required.
 
@@ -112,32 +115,39 @@ For additional information see [BigQuery DATE Format Elements](https://cloud.goo
 
 ## Cluster Columns
 
+Columns to be used as BigQuery clustering columns.
+
 Provided by `--clusterCols` command line argument as a comma-separated list of column names.
 
 Example:
 
 `--clusterCols categoryId,itemId` will create a BigQuery table with `categoryId` and `itemId` set as the clustering columns. Queries with `categoryId` in the where clause will scan significantly less data than if clustering was not enabled.
 
-BigQuery does not allow use of clustering if a partition column is not set. 
+For dimension tables, it is often useful to enable clustering without date partitioning even though BigQuery does not allow use of clustering if a partition column is not set. This can be achieved by adding a partition column that is not actually used in queries.
 
-For dimension tables, it is often useful to enable clustering without date partitioning. This can be achieved by adding a partition column that is not actually used in queries.
-
-This utility creates an unused partition column when partition column is not specified so that clustering can be set on `--clusterCols`.
+When partition column is not specified, this utility creates an `unused` column as partition column with all values set to `NULL`.
 
 Creation of the unused partition column can be disabled by passing `--clusterCols None` to indicate that clustering should not be configured on the destination table.
 
+
 ### Partition Filter
+
+Filter expression used to select Hive partitions to be loaded.
 
 Provided by `--partFilters` command line argument as a SQL-like string similar to a `WHERE` clause. Note: `BETWEEN` is not supported. Quoting is necessary if the filter expression contains spaces or special characters.
 
 Examples:
 
 `--partFilters 'date > 2019-04-18 AND region IN (US,EU) AND part = *'` selects partitions with `date` of April 19 or later with `region` 'US' or 'EU' and any `part`
+
 `--partFilters 'date >= 2019-04-18 AND date < 2019-06-03'` selects partitions with `date` of April 18 to June 2
+
 `--partFilters '*'` matches all partitions
 
 
 ### Partition Refresh
+
+Partition ID used to specify destination partition to be overwritten with data from the selected Hive partitions.
 
 Specified by `--refreshPartition` command-line argument followed by BigQuery partition ID with format `YYYYMMDD`.
 
