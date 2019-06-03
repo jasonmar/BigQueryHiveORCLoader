@@ -243,7 +243,7 @@ object SparkJobs extends Logging {
 
     /* Create temp table if we are refreshing a partition */
     if (c.refreshPartition.isDefined){
-      NativeTableManager.createTableIfNotExists(c.bqProject, c.tempDataset, tmpTableName, c, table.schema, bigqueryWrite, Some(Duration.ofDays(1).toMillis))
+      NativeTableManager.createTableIfNotExists(c.bqProject, c.tempDataset, tmpTableName, c, table.schema, bigqueryWrite, Some(Duration.ofHours(6).toMillis))
     }
 
     val targetTable = if (c.refreshPartition.isDefined) tmpTableName else c.bqTable
