@@ -223,7 +223,7 @@ object ExternalTableManager extends Logging {
                renameOrcCols: Boolean = false,
                dryRun: Boolean = false): scala.Option[TableResult] = {
     // TODO use dest table to provide schema
-    val sql = generateSelectFromExternalTable(
+    val sql = SQLGenerator.generateSelectFromExternalTable(
       extTable = extTableId,
       schema = schema,
       partition = partition,
@@ -291,6 +291,17 @@ object ExternalTableManager extends Logging {
       .getSchema
       .getFields.iterator.asScala
       .forall(f => f.getName.startsWith("_col"))
+  }
+
+  def validBigQueryColumnName(s: String): Boolean = {
+    //https://cloud.google.com/bigquery/docs/schemas#column_names
+    require(s.length <= 128, "column names must be 128 characters or less")
+    val msg = s"$s is not a valid column name"
+    require(!s.startsWith("_TABLE_"), msg)
+    require(!s.startsWith("_FILE_"), msg)
+    require(!s.startsWith("_PARTITION"), msg)
+    require(s.matches("^[a-zA-Z_][a-zA-Z0-9_]{0,127}$"), msg)
+    true
   }
 
   def validBigQueryTableName(s: String): String = {
@@ -365,53 +376,5 @@ object ExternalTableManager extends Logging {
       val day = f"${cal.get(Calendar.DAY_OF_MONTH)}%02d"
       s"$year-$month-$day"
     } else ""
-  }
-
-  def generateSelectFromExternalTable(extTable: TableId,
-                                      schema: StructType,
-                                      partition: Partition,
-                                      unusedColumnName: String,
-                                      formats: Map[String,String] = Map.empty,
-                                      renameOrcCols: Boolean = false): String = {
-    // Columns from partition values
-    val partVals = partition.values
-      .map{x =>
-        val (colName, colValue) = x
-        if (colName == unusedColumnName) {
-          s"NULL as $colName"
-        } else if (formats.contains(colName)){
-          format(colName, colValue, formats(colName))
-        } else {
-          schema.find(_.name == colName) match {
-            case Some(field) if field.dataType.typeName == IntegerType.typeName || field.dataType.typeName == LongType.typeName =>
-              s"$colValue as $colName"
-            case Some(field) if field.dataType.typeName == "date" =>
-              s"PARSE_DATE('%Y-%m-%d','$colValue') as $colName"
-            case Some(field) if field.dataType.typeName == "timestamp" =>
-              s"DATE(PARSE_TIMESTAMP('%Y%m%d%H%M%S','$colValue')) as $colName"
-            case _ =>
-              s"'$colValue' as $colName"
-          }
-        }
-      }
-
-    val partColNames: Set[String] = partition.values.map(_._1).toSet
-
-    // Columns from partition values
-    val data = if (renameOrcCols) {
-      // handle positional column naming
-      schema
-        .filterNot(x => partColNames.contains(x.name))
-        .zipWithIndex
-        .map{x => s"_col${x._2} as ${x._1.name}"}
-    } else {
-      schema.filterNot(field => partColNames.contains(field.name))
-        .map{x => s"${x.name}"}
-    }
-
-    val tableSpec = extTable.getProject + "." + extTable.getDataset + "." + extTable.getTable
-    s"""select
-       |  ${(partVals ++ data).mkString(",\n  ")}
-       |from `$tableSpec`""".stripMargin
   }
 }

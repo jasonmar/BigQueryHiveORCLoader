@@ -75,7 +75,7 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll {
 
   "ExternalTableManager" should "Generate SQL" in {
     val extTable = TableId.of("project", "dataset", "table")
-    val generatedSql = ExternalTableManager.generateSelectFromExternalTable(
+    val generatedSql = SQLGenerator.generateSelectFromExternalTable(
       extTable = extTable,
       schema = TestSchema,
       partition = TestPartition,
