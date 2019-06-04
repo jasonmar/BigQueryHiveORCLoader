@@ -23,7 +23,7 @@ object BQHiveLoader extends Logging {
   }
 
   def main(args: Array[String]): Unit = {
-    Config.Parser.parse(args, Config()) match {
+    ConfigParser.parse(args, Config()) match {
       case Some(config) =>
         init()
         for {

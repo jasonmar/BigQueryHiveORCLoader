@@ -23,14 +23,13 @@ import com.google.api.gax.retrying.RetrySettings
 import com.google.api.gax.rpc.FixedHeaderProvider
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.bigquery._
-import com.google.cloud.bqhiveloader.ExternalTableManager.Orc
+import com.google.cloud.bqhiveloader.ExternalTableManager.{Orc, createExternalTable, hasOrcPositionalColNames, loadPart, waitForCreation}
 import com.google.cloud.bqhiveloader.MetaStore._
 import com.google.cloud.storage.{Storage, StorageOptions}
 import org.apache.spark.SparkFiles
 import org.apache.spark.sql.SparkSession
 import org.threeten.bp.Duration
 
-import scala.util.{Failure, Success, Try}
 
 object SparkJobs extends Logging {
   val BigQueryScope = "https://www.googleapis.com/auth/bigquery"
@@ -237,52 +236,75 @@ object SparkJobs extends Logging {
     /* Create BigQuery table to be loaded */
     NativeTableManager.createTableIfNotExists(c.bqProject, c.bqDataset, c.bqTable, c, table.schema, bigqueryWrite)
 
-    val targetDataset = if (c.refreshPartition.nonEmpty) c.tempDataset else c.bqDataset
+    val externalTables: Seq[(Partition,TableInfo, Boolean)] = partitions.map{part =>
+      val extTable = createExternalTable(c.bqProject, c.tempDataset, c.bqTable,
+        table, part, storageFormat, bigqueryCreate, gcs, c.dryRun)
 
-    val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_" + "_tmp_" + (System.currentTimeMillis()/1000L).toString
+      val renameOrcCols = if (!c.dryRun) {
+        val creation = waitForCreation(extTable.getTableId, timeoutMillis = 120000L, bigqueryCreate)
+        hasOrcPositionalColNames(creation)
+      } else true
 
-    /* Create temp table if we are refreshing a partition */
-    if (c.refreshPartition.isDefined){
-      NativeTableManager.createTableIfNotExists(c.bqProject, c.tempDataset, tmpTableName, c, table.schema, bigqueryWrite, Some(Duration.ofHours(6).toMillis))
+      (part, extTable, renameOrcCols)
     }
 
-    val targetTable = if (c.refreshPartition.isDefined) tmpTableName else c.bqTable
+    val sql: Seq[String] = externalTables.map{x =>
+      val partition = x._1
+      val extTableId = x._2.getTableId
+      val schema = table.schema
+      val renameOrcCols = x._3
+      SQLGenerator.generateSelectFromExternalTable(
+        extTable = extTableId,
+        schema = schema,
+        partition = partition,
+        unusedColumnName = c.unusedColumnName,
+        formats = c.partColFormats.toMap,
+        renameOrcCols = renameOrcCols,
+        dropColumns = c.dropColumns,
+        keepColumns = c.keepColumns)
+    }
+    val unionSQL = sql.mkString("\n\nUNION ALL\n\n")
 
-    /* Submit BigQuery load jobs for each partition */
-    val result = Try(ExternalTableManager.loadParts(
-      project = c.bqProject,
-      dataset = targetDataset,
-      tableName = targetTable,
-      tableMetadata = table,
-      partitions = partitions,
-      unusedColumnName = c.unusedColumnName,
-      partColFormats = c.partColFormats.toMap,
-      dropColumns = c.dropColumns,
-      keepColumns = c.keepColumns,
-      storageFormat = storageFormat,
-      bigqueryCreate = bigqueryCreate,
-      bigqueryWrite = bigqueryWrite,
-      overwrite = c.bqOverwrite,
-      batch = c.bqBatch,
-      gcs = gcs,
-      dryRun = c.dryRun))
-
-    /* Copy temp table into refresh partition */
-    if (c.refreshPartition.isDefined) {
-      val copyAttempt = NativeTableManager.copyOnto(c.bqProject, c.tempDataset, tmpTableName, c.bqProject, c.bqDataset, c.bqTable, destPartition = c.refreshPartition, bq = bigqueryWrite, dryRun = c.dryRun, batch = c.bqBatch)
-      copyAttempt match {
-        case Success(_) =>
-          logger.info("finished refreshing partition")
-        case Failure(exception) =>
-          throw new RuntimeException(s"failed to refresh partition with config:\n$c\n\ntable:\n$table", exception)
-      }
+    if (unionSQL.length < 1024 * 1024) {
+      logger.info("Submitting Query:\n" + unionSQL)
+      val destTableId = TableId.of(c.bqProject, c.bqDataset, c.bqTable)
+      val jobId = ExternalTableManager.jobid(destTableId)
+      ExternalTableManager.runQuery(unionSQL, destTableId, jobId, c.bqProject,
+        c.bqLocation, c.dryRun, c.bqOverwrite, c.bqBatch, bigqueryWrite)
+      logger.info("finished loading partitions")
     } else {
-      result match {
-        case Success(_) =>
-          logger.info("finished loading partitions")
-        case Failure(exception) =>
-          throw new RuntimeException(s"failed to load partitions with config:\n$c\n\ntable:\n$table", exception)
+      val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_" + "_tmp_" + (System.currentTimeMillis()/1000L).toString
+      logger.info("Loading partitions into temporary table " + tmpTableName)
+
+      NativeTableManager.createTableIfNotExists(c.bqProject, c.tempDataset, tmpTableName, c, table.schema, bigqueryWrite, Some(Duration.ofHours(6).toMillis))
+
+      logger.info("Loading partitions from external tables")
+      val tmpTableId = TableId.of(c.bqProject, c.tempDataset, tmpTableName)
+      externalTables.flatMap { x =>
+        val partition = x._1
+        val extTableId = x._2.getTableId
+        val schema = table.schema
+        val renameOrcCols = x._3
+        ExternalTableManager.loadPart(
+          destTableId = tmpTableId,
+          schema = schema,
+          partition = partition,
+          extTableId = extTableId,
+          unusedColumnName = c.unusedColumnName,
+          partColFormats = c.partColFormats.toMap,
+          bigqueryWrite = bigqueryWrite,
+          batch = c.bqBatch,
+          overwrite = c.bqOverwrite,
+          renameOrcCols = renameOrcCols,
+          dryRun = c.dryRun,
+          dropColumns = c.dropColumns,
+          keepColumns = c.keepColumns)
       }
+      logger.info("Finished loading " + tmpTableName)
+      NativeTableManager.copyOnto(c.bqProject, c.tempDataset, tmpTableName,
+        c.bqProject, c.bqDataset, c.bqTable, destPartition = c.refreshPartition,
+        bq = bigqueryWrite, dryRun = c.dryRun, batch = c.bqBatch)
+      logger.info(s"Finished loading ${c.bqTable}")
     }
   }
 }

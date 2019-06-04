@@ -174,45 +174,25 @@ object ExternalTableManager extends Logging {
            dryRun = dryRun)
   }
 
-  def loadParts(project: String,
-                dataset: String,
-                tableName: String,
-                tableMetadata: TableMetadata,
-                partitions: Seq[Partition],
-                unusedColumnName: String,
-                partColFormats: Map[String,String],
-                dropColumns: Set[String] = Set.empty,
-                keepColumns: Set[String] = Set.empty,
-                storageFormat: StorageFormat,
-                bigqueryCreate: BigQuery,
-                bigqueryWrite: BigQuery,
-                overwrite: Boolean,
-                batch: Boolean,
-                gcs: Storage,
-                dryRun: Boolean): Seq[TableResult] = {
-    partitions.flatMap { part =>
-      val extTable = createExternalTable(
-        project, dataset, tableName,
-        tableMetadata, part, storageFormat, bigqueryCreate, gcs, dryRun)
+  def runQuery(sql: String, destTableId: TableId, jobid: String, project: String, location: String, dryRun: Boolean, overwrite: Boolean, batch: Boolean, bq: BigQuery): TableResult = {
+    val query = QueryJobConfiguration
+      .newBuilder(sql)
+      .setCreateDisposition(CreateDisposition.CREATE_NEVER)
+      .setWriteDisposition(if (!overwrite) WriteDisposition.WRITE_APPEND else WriteDisposition.WRITE_TRUNCATE)
+      .setDestinationTable(destTableId)
+      .setPriority(if (batch) Priority.BATCH else Priority.INTERACTIVE)
+      .setUseLegacySql(false)
+      .setUseQueryCache(false)
+      .setDryRun(dryRun)
+      .build()
 
-      val renameOrcCols = if (!dryRun) hasOrcPositionalColNames(
-        waitForCreation(extTable.getTableId, timeoutMillis = 120000L, bigqueryCreate)) else true
+    val jobId = JobId.newBuilder()
+      .setProject(project)
+      .setLocation(location)
+      .setJob(jobid)
+      .build()
 
-      loadPart(
-        destTableId = TableId.of(project, dataset, tableName),
-        schema = tableMetadata.schema,
-        partition = part,
-        extTableId = extTable.getTableId,
-        unusedColumnName = unusedColumnName,
-        partColFormats = partColFormats,
-        bigqueryWrite = bigqueryWrite,
-        batch = batch,
-        overwrite = overwrite,
-        renameOrcCols = renameOrcCols,
-        dryRun = dryRun,
-        dropColumns = dropColumns,
-        keepColumns = keepColumns)
-    }
+    bq.query(query, jobId)
   }
 
   def loadPart(destTableId: TableId,
@@ -266,6 +246,16 @@ object ExternalTableManager extends Logging {
           throw new RuntimeException(s"failed to run sql:\n$sql\n\npartition:\n$partition\n\nschema:\n${schema.map(_.toString()).mkString("\n")}", exception)
       }
     }
+  }
+
+  def jobid(table: TableId): String = {
+    validJobId(Seq(
+      "load",
+      table.getDataset,
+      table.getTable,
+      "all",
+      (System.currentTimeMillis()/1000).toString
+    ).mkString("_"))
   }
 
   def jobid(table: TableId, partition: Partition): String = {
