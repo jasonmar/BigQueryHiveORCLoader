@@ -53,6 +53,14 @@ object Config {
         .action{(x, c) => c.copy(clusterColumns = x.map(_.toLowerCase))}
         .text("(optional) Cluster columns if creating BigQuery table (default: None)")
 
+      opt[Seq[String]]("drop")
+        .action{(x, c) => c.copy(dropColumns = x.map(_.toLowerCase).toSet)}
+        .text("(optional) Comma-separated list of columns to be ignored (default: None)")
+
+      opt[Seq[String]]("keep")
+        .action{(x, c) => c.copy(keepColumns = x.map(_.toLowerCase).toSet)}
+        .text("(optional) Comma-separated list of columns to be loaded; all others will be ignored (default: None)")
+
       opt[Map[String,String]]("partColFormats")
         .action{(x, c) => c.copy(partColFormats = x.toSeq)}
         .text("(optional) Partition Column format to be used to parse INTEGER or STRING type partition column as DATE. Provided as comma separated key/value pairs col=fmt. Example: 'date=%Y-%m-%d,month=YYYYMM' (default: None)")
@@ -153,6 +161,12 @@ object Config {
           failure("Can't set both bqKeyFile and bqWriteKeyFile")
         else if (c.refreshPartition.isDefined && c.tempDataset.isEmpty)
           failure("must provide tempDataset if with refresh partition")
+        else if (c.keepColumns.nonEmpty && c.dropColumns.nonEmpty)
+          failure("only one of keep,drop may be provided")
+        else if (c.keepColumns.nonEmpty && c.keepColumns.exists(!ExternalTableManager.validBigQueryColumnName(_)))
+          failure("keepColumns contains invalid column names")
+        else if (c.dropColumns.nonEmpty && c.dropColumns.exists(!ExternalTableManager.validBigQueryColumnName(_)))
+          failure("dropColumns contains invalid column names")
         else success
       }
     }
@@ -162,7 +176,9 @@ case class Config(partitioned: Boolean = true,
                   dryRun: Boolean = false,
                   partFilters: String = "",
                   partitionColumn: Option[String] = None,
-                  clusterColumns: Seq[String]= Seq.empty,
+                  clusterColumns: Seq[String] = Seq.empty,
+                  dropColumns: Set[String] = Set.empty,
+                  keepColumns: Set[String] = Set.empty,
                   partColFormats: Seq[(String,String)] = Seq.empty,
                   unusedColumnName: String = "unused",
                   hiveDbName: String = "",

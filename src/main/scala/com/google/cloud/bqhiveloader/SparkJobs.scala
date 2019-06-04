@@ -257,6 +257,8 @@ object SparkJobs extends Logging {
       partitions = partitions,
       unusedColumnName = c.unusedColumnName,
       partColFormats = c.partColFormats.toMap,
+      dropColumns = c.dropColumns,
+      keepColumns = c.keepColumns,
       storageFormat = storageFormat,
       bigqueryCreate = bigqueryCreate,
       bigqueryWrite = bigqueryWrite,

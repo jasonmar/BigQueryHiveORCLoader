@@ -181,6 +181,8 @@ object ExternalTableManager extends Logging {
                 partitions: Seq[Partition],
                 unusedColumnName: String,
                 partColFormats: Map[String,String],
+                dropColumns: Set[String] = Set.empty,
+                keepColumns: Set[String] = Set.empty,
                 storageFormat: StorageFormat,
                 bigqueryCreate: BigQuery,
                 bigqueryWrite: BigQuery,
@@ -207,7 +209,9 @@ object ExternalTableManager extends Logging {
         batch = batch,
         overwrite = overwrite,
         renameOrcCols = renameOrcCols,
-        dryRun = dryRun)
+        dryRun = dryRun,
+        dropColumns = dropColumns,
+        keepColumns = keepColumns)
     }
   }
 
@@ -221,7 +225,9 @@ object ExternalTableManager extends Logging {
                overwrite: Boolean = false,
                batch: Boolean = true,
                renameOrcCols: Boolean = false,
-               dryRun: Boolean = false): scala.Option[TableResult] = {
+               dryRun: Boolean = false,
+               dropColumns: Set[String] = Set.empty,
+               keepColumns: Set[String] = Set.empty): scala.Option[TableResult] = {
     // TODO use dest table to provide schema
     val sql = SQLGenerator.generateSelectFromExternalTable(
       extTable = extTableId,
@@ -229,7 +235,9 @@ object ExternalTableManager extends Logging {
       partition = partition,
       unusedColumnName = unusedColumnName,
       formats = partColFormats,
-      renameOrcCols = renameOrcCols)
+      renameOrcCols = renameOrcCols,
+      dropColumns = dropColumns,
+      keepColumns = keepColumns)
 
     val query = QueryJobConfiguration
       .newBuilder(sql)

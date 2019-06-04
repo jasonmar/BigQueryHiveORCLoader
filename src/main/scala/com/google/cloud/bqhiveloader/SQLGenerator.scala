@@ -27,7 +27,9 @@ object SQLGenerator {
                                       partition: Partition,
                                       unusedColumnName: String,
                                       formats: Map[String,String] = Map.empty,
-                                      renameOrcCols: Boolean = false): String = {
+                                      renameOrcCols: Boolean = false,
+                                      dropColumns: Set[String] = Set.empty,
+                                      keepColumns: Set[String] = Set.empty): String = {
     // Columns from partition values
     // Examples:
     // PARSE_DATE('%Y-%m-%d','2019-06-04') as date
@@ -56,21 +58,27 @@ object SQLGenerator {
     val partColNames: Set[String] = partition.values.map(_._1).toSet
 
     // Columns from partition values
-    val data = if (renameOrcCols) {
+    val renamed = if (renameOrcCols) {
       // handle positional column naming
       schema
         .filterNot(field => partColNames.contains(field.name))
         .zipWithIndex
-        .map{x => s"_col${x._2} as ${x._1.name}"}
+        .map{x => (x._1.name, s"_col${x._2} as ${x._1.name}")}
     } else {
       schema
         .filterNot(field => partColNames.contains(field.name))
-        .map{x => s"${x.name}"}
+        .map{x => (x.name, s"${x.name}") }
     }
+
+    // handle drop/keep
+    val fields = renamed
+      .filterNot(field => dropColumns.contains(field._1))
+      .filter(field => keepColumns.isEmpty || keepColumns.contains(field._1))
+      .map(_._2)
 
     val tableSpec = extTable.getProject + "." + extTable.getDataset + "." + extTable.getTable
     s"""select
-       |  ${(partVals ++ data).mkString(",\n  ")}
+       |  ${(partVals ++ fields).mkString(",\n  ")}
        |from `$tableSpec`""".stripMargin
   }
 }
