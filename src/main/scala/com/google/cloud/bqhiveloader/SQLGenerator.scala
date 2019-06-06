@@ -29,7 +29,8 @@ object SQLGenerator {
                                       formats: Map[String,String] = Map.empty,
                                       renameOrcCols: Boolean = false,
                                       dropColumns: Set[String] = Set.empty,
-                                      keepColumns: Set[String] = Set.empty): String = {
+                                      keepColumns: Set[String] = Set.empty,
+                                      renameColumns: Map[String,String] = Map.empty): String = {
     // Columns from partition values
     // Examples:
     // PARSE_DATE('%Y-%m-%d','2019-06-04') as date
@@ -70,11 +71,18 @@ object SQLGenerator {
         .map{x => (x.name, s"${x.name}") }
     }
 
-    // handle drop/keep
+    // handle drop/keep and rename
     val fields = renamed
       .filterNot(field => dropColumns.contains(field._1))
       .filter(field => keepColumns.isEmpty || keepColumns.contains(field._1))
-      .map(_._2)
+      .map{x =>
+        renameColumns.get(x._1) match {
+          case Some(newName) =>
+            x._2.replaceAllLiterally(x._1, newName)
+          case _ =>
+            x._2
+        }
+      }
 
     val tableSpec = extTable.getProject + "." + extTable.getDataset + "." + extTable.getTable
     s"""select

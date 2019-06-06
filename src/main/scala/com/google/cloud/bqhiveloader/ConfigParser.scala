@@ -59,6 +59,10 @@ object ConfigParser extends scopt.OptionParser[Config]("BQHiveLoader") {
     .action{(x, c) => c.copy(keepColumns = x.map(_.toLowerCase).toSet)}
     .text("(optional) Comma-separated list of columns to be loaded; all others will be ignored (default: None)")
 
+  opt[Map[String,String]]("rename")
+    .action{(x, c) => c.copy(renameColumns = x.toSeq)}
+    .text("(optional) Column rename rules. Provided as comma separated key/value pairs oldname=newName. Example: 'dt=date,mth=month' (default: None)")
+
   opt[Map[String,String]]("partColFormats")
     .action{(x, c) => c.copy(partColFormats = x.toSeq)}
     .text("(optional) Partition Column format to be used to parse INTEGER or STRING type partition column as DATE. Provided as comma separated key/value pairs col=fmt. Example: 'date=%Y-%m-%d,month=YYYYMM' (default: None)")

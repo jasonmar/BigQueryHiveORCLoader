@@ -28,12 +28,14 @@ import com.google.cloud.bqhiveloader.MetaStore._
 import com.google.cloud.storage.{Storage, StorageOptions}
 import org.apache.spark.SparkFiles
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.types.StructType
 import org.threeten.bp.Duration
 
 
 object SparkJobs extends Logging {
   val BigQueryScope = "https://www.googleapis.com/auth/bigquery"
   val StorageScope = "https://www.googleapis.com/auth/devstorage.read_write"
+  val MaxSQLLength = 12 * 1024 * 1024
 
   def run(config: Config): Unit = {
     val spark = SparkSession
@@ -233,8 +235,20 @@ object SparkJobs extends Logging {
         .map(ExternalTableManager.parseStorageFormat)
         .getOrElse(Orc)
 
+    val filteredSchema = StructType(table.schema
+      .filterNot{x => c.dropColumns.contains(x.name)}
+      .filter{x => c.keepColumns.contains(x.name) || c.keepColumns.isEmpty}
+      .map{x =>
+        c.renameColumns.find(_._1 == x.name) match {
+          case Some((_, newName)) =>
+            x.copy(name = newName)
+          case _ =>
+            x
+        }
+      })
+
     /* Create BigQuery table to be loaded */
-    NativeTableManager.createTableIfNotExists(c.bqProject, c.bqDataset, c.bqTable, c, table.schema, bigqueryWrite)
+    NativeTableManager.createTableIfNotExists(c.bqProject, c.bqDataset, c.bqTable, c, filteredSchema, bigqueryWrite)
 
     val externalTables: Seq[(Partition,TableInfo, Boolean)] = partitions.map{part =>
       val extTable = createExternalTable(c.bqProject, c.tempDataset, c.bqTable,
@@ -265,7 +279,7 @@ object SparkJobs extends Logging {
     }
     val unionSQL = sql.mkString("\n\nUNION ALL\n\n")
 
-    if (unionSQL.length < 1024 * 1024) {
+    if (unionSQL.length < MaxSQLLength) {
       logger.info("Submitting Query:\n" + unionSQL)
       val destTableId = TableId.of(c.bqProject, c.bqDataset, c.bqTable)
       val jobId = ExternalTableManager.jobid(destTableId)
@@ -298,7 +312,8 @@ object SparkJobs extends Logging {
           renameOrcCols = renameOrcCols,
           dryRun = c.dryRun,
           dropColumns = c.dropColumns,
-          keepColumns = c.keepColumns)
+          keepColumns = c.keepColumns,
+          renameColumns = c.renameColumns.toMap)
       }
       logger.info("Finished loading " + tmpTableName)
       NativeTableManager.copyOnto(c.bqProject, c.tempDataset, tmpTableName,

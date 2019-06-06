@@ -207,7 +207,8 @@ object ExternalTableManager extends Logging {
                renameOrcCols: Boolean = false,
                dryRun: Boolean = false,
                dropColumns: Set[String] = Set.empty,
-               keepColumns: Set[String] = Set.empty): scala.Option[TableResult] = {
+               keepColumns: Set[String] = Set.empty,
+               renameColumns: Map[String,String] = Map.empty): scala.Option[TableResult] = {
     // TODO use dest table to provide schema
     val sql = SQLGenerator.generateSelectFromExternalTable(
       extTable = extTableId,
@@ -217,7 +218,8 @@ object ExternalTableManager extends Logging {
       formats = partColFormats,
       renameOrcCols = renameOrcCols,
       dropColumns = dropColumns,
-      keepColumns = keepColumns)
+      keepColumns = keepColumns,
+      renameColumns = renameColumns)
 
     val query = QueryJobConfiguration
       .newBuilder(sql)
