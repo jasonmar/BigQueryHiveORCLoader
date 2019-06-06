@@ -25,9 +25,10 @@ import com.google.cloud.bqhiveloader.Mapping.convertStructType
 import com.google.cloud.bqhiveloader.MetaStore.{Partition, TableMetadata}
 import com.google.cloud.storage.Storage
 import com.google.common.base.Preconditions
+import com.google.common.io.BaseEncoding
 import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 object ExternalTableManager extends Logging {
   sealed trait StorageFormat
@@ -251,12 +252,15 @@ object ExternalTableManager extends Logging {
   }
 
   def jobid(table: TableId): String = {
+    val randomBytes = new Array[Byte](6)
+    Random.nextBytes(randomBytes)
     validJobId(Seq(
       "load",
       table.getDataset,
       table.getTable,
       "all",
-      (System.currentTimeMillis()/1000).toString
+      (System.currentTimeMillis()/1000).toString,
+      BaseEncoding.base64().encode(randomBytes)
     ).mkString("_"))
   }
 

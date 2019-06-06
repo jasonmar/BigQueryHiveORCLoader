@@ -287,7 +287,7 @@ object SparkJobs extends Logging {
         c.bqLocation, c.dryRun, c.bqOverwrite, c.bqBatch, bigqueryWrite)
       logger.info("finished loading partitions")
     } else {
-      val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_" + "_tmp_" + (System.currentTimeMillis()/1000L).toString
+      val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_tmp_" + (System.currentTimeMillis()/1000L).toString
       logger.info("Loading partitions into temporary table " + tmpTableName)
 
       NativeTableManager.createTableIfNotExists(c.bqProject, c.tempDataset, tmpTableName, c, table.schema, bigqueryWrite, Some(Duration.ofHours(6).toMillis))
