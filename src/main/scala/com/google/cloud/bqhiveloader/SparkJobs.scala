@@ -194,7 +194,15 @@ object SparkJobs extends Logging {
       }
 
     val retrySettings = RetrySettings.newBuilder()
-      .setMaxAttempts(1)
+      .setMaxAttempts(0)
+      .setTotalTimeout(Duration.ofHours(24))
+      .setInitialRetryDelay(Duration.ofSeconds(3))
+      .setRetryDelayMultiplier(2.0d)
+      .setMaxRetryDelay(Duration.ofSeconds(300))
+      .setInitialRpcTimeout(Duration.ofSeconds(15))
+      .setRpcTimeoutMultiplier(1.0d)
+      .setMaxRpcTimeout(Duration.ofSeconds(15))
+      .setJittered(false)
       .build()
 
     val bigqueryCreate: BigQuery = BigQueryOptions.newBuilder()
@@ -277,16 +285,20 @@ object SparkJobs extends Logging {
       val destTableId = TableId.of(c.bqProject, c.bqDataset, c.bqTable)
       val queryJob = ExternalTableManager.runQuery(unionSQL, destTableId, c.bqProject,
         c.bqLocation, c.dryRun, c.bqOverwrite, c.bqBatch, bigqueryWrite)
-      Option(queryJob.waitFor(RetryOption.totalTimeout(Duration.ofHours(8)))) match {
+      val jobId = queryJob.getJobId.getJob
+      logger.info(s"Waiting for QueryJob $jobId")
+      scala.Option(queryJob.waitFor(RetryOption.totalTimeout(Duration.ofHours(8)))) match {
         case None =>
-          logger.error("job failed")
-          throw new RuntimeException("job doesn't exist")
-        case Some(j) if j.getStatus().getError() != null =>
-          logger.error("job failed")
-          throw new RuntimeException(j.getStatus().getError().getMessage)
+          val msg = s"Job $jobId doesn't exist"
+          logger.error(msg)
+          throw new RuntimeException(msg)
+        case Some(j) if j.getStatus.getError != null =>
+          val msg = s"Job $jobId failed with message: " + j.getStatus.getError.getMessage
+          logger.error(msg)
+          throw new RuntimeException(msg)
         case _ =>
       }
-      logger.info("finished loading partitions")
+      logger.info(s"Finished loading partitions with QueryJob $jobId")
     } else {
       val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_tmp_" + (System.currentTimeMillis()/1000L).toString
       logger.info("Loading partitions into temporary table " + tmpTableName)
@@ -295,12 +307,12 @@ object SparkJobs extends Logging {
 
       logger.info("Loading partitions from external tables")
       val tmpTableId = TableId.of(c.bqProject, c.tempDataset, tmpTableName)
-      externalTables.flatMap { x =>
+      val jobs = externalTables.map{ x =>
         val partition = x._1
         val extTableId = x._2.getTableId
         val schema = table.schema
         val renameOrcCols = x._3
-        ExternalTableManager.loadPart(
+        val loadJob = ExternalTableManager.loadPart(
           destTableId = tmpTableId,
           schema = schema,
           partition = partition,
@@ -315,7 +327,23 @@ object SparkJobs extends Logging {
           dropColumns = c.dropColumns,
           keepColumns = c.keepColumns,
           renameColumns = c.renameColumns.toMap)
+        logger.info(s"Created QueryJob ${loadJob.getJobId.getJob}")
+        (partition, loadJob)
       }
+
+      jobs.foreach{x =>
+        val (partition,loadJob) = x
+        scala.Option(loadJob.waitFor(RetryOption.totalTimeout(Duration.ofDays(1)))) match {
+          case Some(j) if j.getStatus.getError != null =>
+            val msg = s"Job ${j.getJobId.getJob} failed with message: ${j.getStatus.getError}\nsql:\n$sql\n\npartition:\n$partition\n\nschema:\n${table.schema.map(_.toString).mkString("\n")}"
+            throw new RuntimeException(msg)
+          case None =>
+            val msg = s"Job was not created successfully"
+            throw new RuntimeException(msg)
+          case _ =>
+        }
+      }
+
       logger.info("Finished loading " + tmpTableName)
       NativeTableManager.copyOnto(c.bqProject, c.tempDataset, tmpTableName,
         c.bqProject, c.bqDataset, c.bqTable, destPartition = c.refreshPartition,

@@ -18,6 +18,7 @@ package com.google.cloud.bqhiveloader
 
 import java.util.Calendar
 
+import com.google.cloud.RetryOption
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
 import com.google.cloud.bigquery._
@@ -27,6 +28,7 @@ import com.google.cloud.storage.Storage
 import com.google.common.base.Preconditions
 import com.google.common.io.BaseEncoding
 import org.apache.spark.sql.types.StructType
+import org.threeten.bp.Duration
 
 import scala.util.{Failure, Random, Success, Try}
 
@@ -194,17 +196,7 @@ object ExternalTableManager extends Logging {
       .setJob(jobid(destTableId))
       .build()
 
-    try {
-      bq.query(query, jobId)
-    } catch {
-      case e: BigQueryException =>
-        if (!e.getMessage.contains("Already Exists"))
-          logger.error(e.getMessage, e)
-        else
-          logger.warn(e.getMessage, e)
-    }
-
-    bq.getJob(jobId)
+    bq.create(JobInfo.of(jobId, query))
   }
 
   def loadPart(destTableId: TableId,
@@ -220,7 +212,7 @@ object ExternalTableManager extends Logging {
                dryRun: Boolean = false,
                dropColumns: Set[String] = Set.empty,
                keepColumns: Set[String] = Set.empty,
-               renameColumns: Map[String,String] = Map.empty): scala.Option[TableResult] = {
+               renameColumns: Map[String,String] = Map.empty): Job = {
     // TODO use dest table to provide schema
     val sql = SQLGenerator.generateSelectFromExternalTable(
       extTable = extTableId,
@@ -241,6 +233,7 @@ object ExternalTableManager extends Logging {
       .setPriority(if (batch) Priority.BATCH else Priority.INTERACTIVE)
       .setUseLegacySql(false)
       .setUseQueryCache(false)
+      .setDryRun(dryRun)
       .build()
 
     val jobId = JobId.newBuilder()
@@ -249,17 +242,7 @@ object ExternalTableManager extends Logging {
       .setJob(jobid(destTableId, partition))
       .build()
 
-    if (dryRun){
-      logger.info("QueryJob:\n" + query.toString + "\n\nJobId:\n" + jobId.toString)
-      None
-    } else {
-      Try(bigqueryWrite.query(query, jobId)) match {
-        case Success(tableResult) =>
-          scala.Option(tableResult)
-        case Failure(exception) =>
-          throw new RuntimeException(s"failed to run sql:\n$sql\n\npartition:\n$partition\n\nschema:\n${schema.map(_.toString()).mkString("\n")}", exception)
-      }
-    }
+    bigqueryWrite.create(JobInfo.of(jobId, query))
   }
 
   def jobid(table: TableId): String = {
