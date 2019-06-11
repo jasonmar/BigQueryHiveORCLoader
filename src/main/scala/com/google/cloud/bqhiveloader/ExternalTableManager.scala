@@ -199,8 +199,9 @@ object ExternalTableManager extends Logging {
     try {
       bq.query(query, jobId)
     } catch {
-      case e: BigQueryException if !e.getMessage.contains("Already Exists") =>
-        logger.error(e.getMessage, e)
+      case e: BigQueryException =>
+        if (!e.getMessage.contains("Already Exists"))
+          logger.error(e.getMessage, e)
     }
 
     bq.getJob(jobId)
