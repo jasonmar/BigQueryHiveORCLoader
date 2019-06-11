@@ -40,6 +40,7 @@ object Util {
     Util.setDebug("com.google.cloud.example")
     Seq(
       "org.apache.orc.impl.MemoryManagerImpl",
+      "org.apache.spark.ContextCleaner",
       "org.apache.spark.network.netty",
       "org.apache.spark.executor.Executor",
       "org.apache.spark.scheduler",

@@ -22,6 +22,7 @@ import java.nio.file.{Files, Paths}
 import com.google.api.gax.retrying.RetrySettings
 import com.google.api.gax.rpc.FixedHeaderProvider
 import com.google.auth.oauth2.GoogleCredentials
+import com.google.cloud.RetryOption
 import com.google.cloud.bigquery._
 import com.google.cloud.bqhiveloader.ExternalTableManager.{Orc, createExternalTable, hasOrcPositionalColNames, loadPart, waitForCreation}
 import com.google.cloud.bqhiveloader.MetaStore._
@@ -278,13 +279,21 @@ object SparkJobs extends Logging {
         keepColumns = c.keepColumns)
     }
     val unionSQL = sql.mkString("\n\nUNION ALL\n\n")
-
+    logger.info(s"Generated SQL with length ${unionSQL.length}")
     if (unionSQL.length < MaxSQLLength) {
-      logger.info("Submitting Query:\n" + unionSQL)
+      logger.debug("Submitting Query:\n" + unionSQL)
       val destTableId = TableId.of(c.bqProject, c.bqDataset, c.bqTable)
-      val jobId = ExternalTableManager.jobid(destTableId)
-      ExternalTableManager.runQuery(unionSQL, destTableId, jobId, c.bqProject,
+      val queryJob = ExternalTableManager.runQuery(unionSQL, destTableId, c.bqProject,
         c.bqLocation, c.dryRun, c.bqOverwrite, c.bqBatch, bigqueryWrite)
+      Option(queryJob.waitFor(RetryOption.totalTimeout(Duration.ofHours(8)))) match {
+        case None =>
+          logger.error("job failed")
+          throw new RuntimeException("job doesn't exist")
+        case Some(j) if j.getStatus().getError() != null =>
+          logger.error("job failed")
+          throw new RuntimeException(j.getStatus().getError().getMessage)
+        case _ =>
+      }
       logger.info("finished loading partitions")
     } else {
       val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_tmp_" + (System.currentTimeMillis()/1000L).toString

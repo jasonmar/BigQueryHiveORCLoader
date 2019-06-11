@@ -18,6 +18,8 @@ package com.google.cloud.bqhiveloader
 
 import java.util.Calendar
 
+import com.google.cloud.RetryOption
+import com.google.cloud.bigquery.BigQuery.JobOption
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
 import com.google.cloud.bigquery._
@@ -175,7 +177,7 @@ object ExternalTableManager extends Logging {
            dryRun = dryRun)
   }
 
-  def runQuery(sql: String, destTableId: TableId, jobid: String, project: String, location: String, dryRun: Boolean, overwrite: Boolean, batch: Boolean, bq: BigQuery): TableResult = {
+  def runQuery(sql: String, destTableId: TableId, project: String, location: String, dryRun: Boolean, overwrite: Boolean, batch: Boolean, bq: BigQuery): Job = {
     val query = QueryJobConfiguration
       .newBuilder(sql)
       .setCreateDisposition(CreateDisposition.CREATE_NEVER)
@@ -185,15 +187,23 @@ object ExternalTableManager extends Logging {
       .setUseLegacySql(false)
       .setUseQueryCache(false)
       .setDryRun(dryRun)
+      .setAllowLargeResults(true)
       .build()
 
     val jobId = JobId.newBuilder()
       .setProject(project)
       .setLocation(location)
-      .setJob(jobid)
+      .setJob(jobid(destTableId))
       .build()
 
-    bq.query(query, jobId)
+    try {
+      bq.query(query, jobId)
+    } catch {
+      case e: BigQueryException if !e.getMessage.contains("Already Exists") =>
+        logger.error(e.getMessage, e)
+    }
+
+    bq.getJob(jobId)
   }
 
   def loadPart(destTableId: TableId,
