@@ -18,8 +18,6 @@ package com.google.cloud.bqhiveloader
 
 import java.util.Calendar
 
-import com.google.cloud.RetryOption
-import com.google.cloud.bigquery.BigQuery.JobOption
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
 import com.google.cloud.bigquery._
@@ -28,7 +26,7 @@ import com.google.cloud.bqhiveloader.MetaStore.{Partition, TableMetadata}
 import com.google.cloud.storage.Storage
 import com.google.common.base.Preconditions
 import com.google.common.io.BaseEncoding
-import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
+import org.apache.spark.sql.types.StructType
 
 import scala.util.{Failure, Random, Success, Try}
 
@@ -202,6 +200,8 @@ object ExternalTableManager extends Logging {
       case e: BigQueryException =>
         if (!e.getMessage.contains("Already Exists"))
           logger.error(e.getMessage, e)
+        else
+          logger.warn(e.getMessage, e)
     }
 
     bq.getJob(jobId)

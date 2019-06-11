@@ -194,15 +194,7 @@ object SparkJobs extends Logging {
       }
 
     val retrySettings = RetrySettings.newBuilder()
-      .setMaxAttempts(0)
-      .setTotalTimeout(Duration.ofHours(24))
-      .setInitialRetryDelay(Duration.ofSeconds(3))
-      .setRetryDelayMultiplier(2.0d)
-      .setMaxRetryDelay(Duration.ofSeconds(300))
-      .setInitialRpcTimeout(Duration.ofSeconds(15))
-      .setRpcTimeoutMultiplier(1.0d)
-      .setMaxRpcTimeout(Duration.ofSeconds(15))
-      .setJittered(false)
+      .setMaxAttempts(1)
       .build()
 
     val bigqueryCreate: BigQuery = BigQueryOptions.newBuilder()
