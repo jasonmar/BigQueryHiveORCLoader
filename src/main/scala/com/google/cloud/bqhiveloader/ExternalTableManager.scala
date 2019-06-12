@@ -196,7 +196,16 @@ object ExternalTableManager extends Logging {
       .setJob(jobid(destTableId))
       .build()
 
-    bq.create(JobInfo.of(jobId, query))
+    createJob(bq, jobId, query)
+  }
+
+  def createJob(bq: BigQuery, jobId: JobId, jobConfiguration: JobConfiguration): Job = {
+    try {
+      bq.create(JobInfo.of(jobId, jobConfiguration))
+    } catch {
+      case _: BigQueryException =>
+        bq.getJob(jobId)
+    }
   }
 
   def loadPart(destTableId: TableId,
@@ -242,7 +251,7 @@ object ExternalTableManager extends Logging {
       .setJob(jobid(destTableId, partition))
       .build()
 
-    bigqueryWrite.create(JobInfo.of(jobId, query))
+    createJob(bigqueryWrite, jobId, query)
   }
 
   def jobid(table: TableId): String = {

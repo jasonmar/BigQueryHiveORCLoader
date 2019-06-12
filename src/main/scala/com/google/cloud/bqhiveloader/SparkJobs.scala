@@ -24,7 +24,7 @@ import com.google.api.gax.rpc.FixedHeaderProvider
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.RetryOption
 import com.google.cloud.bigquery._
-import com.google.cloud.bqhiveloader.ExternalTableManager.{Orc, createExternalTable, hasOrcPositionalColNames, loadPart, waitForCreation}
+import com.google.cloud.bqhiveloader.ExternalTableManager.{Orc, createExternalTable, hasOrcPositionalColNames, waitForCreation}
 import com.google.cloud.bqhiveloader.MetaStore._
 import com.google.cloud.storage.{Storage, StorageOptions}
 import org.apache.spark.SparkFiles
@@ -36,7 +36,7 @@ import org.threeten.bp.Duration
 object SparkJobs extends Logging {
   val BigQueryScope = "https://www.googleapis.com/auth/bigquery"
   val StorageScope = "https://www.googleapis.com/auth/devstorage.read_write"
-  val MaxSQLLength = 12 * 1024 * 1024
+  val MaxSQLLength: Int = 12 * 1024 * 1024
 
   def run(config: Config): Unit = {
     val spark = SparkSession

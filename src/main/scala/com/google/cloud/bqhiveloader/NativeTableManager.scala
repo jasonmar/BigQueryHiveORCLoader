@@ -20,6 +20,7 @@ import com.google.cloud.RetryOption
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
 import com.google.cloud.bigquery._
+import com.google.cloud.bqhiveloader.ExternalTableManager.jobid
 import org.apache.spark.sql.types.{DateType, StructType}
 import org.threeten.bp.Duration
 
@@ -72,7 +73,7 @@ object NativeTableManager extends Logging {
             .map(e => Failure(new RuntimeException(e.toString)))
             .getOrElse(Success(j))
         case _ =>
-          Failure(new RuntimeException("Copy Job doesn't exist"))
+          Failure(new RuntimeException("Job doesn't exist"))
       }
     } else Success(null)
   }
@@ -95,10 +96,15 @@ object NativeTableManager extends Logging {
       .setUseQueryCache(false)
       .setPriority(if (batch) Priority.BATCH else Priority.INTERACTIVE)
       .build()
-    val jobInfo = JobInfo.newBuilder(jobConfig).build()
+
+    val jobId = JobId.newBuilder()
+      .setProject(src.getProject)
+      .setJob(jobid(dest))
+      .build()
+    val jobInfo = JobInfo.of(jobId, jobConfig)
     logger.info(jobInfo.toString)
     if (dryRun) None
-    else scala.Option(bq.create(jobInfo))
+    else scala.Option(ExternalTableManager.createJob(bq, jobId, jobConfig))
   }
 
   def createTable(c: Config, schema: StructType, destTableId: TableId, bigquery: BigQuery, expirationMs: scala.Option[Long] = None): Table ={
