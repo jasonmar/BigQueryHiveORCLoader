@@ -285,20 +285,19 @@ object SparkJobs extends Logging {
       val destTableId = TableId.of(c.bqProject, c.bqDataset, c.bqTable)
       val queryJob = ExternalTableManager.runQuery(unionSQL, destTableId, c.bqProject,
         c.bqLocation, c.dryRun, c.bqOverwrite, c.bqBatch, bigqueryWrite)
-      val jobId = queryJob.getJobId.getJob
-      logger.info(s"Waiting for QueryJob $jobId")
+      logger.info(s"Waiting for Job")
       scala.Option(queryJob.waitFor(RetryOption.totalTimeout(Duration.ofHours(8)))) match {
         case None =>
-          val msg = s"Job $jobId doesn't exist"
+          val msg = s"Job doesn't exist"
           logger.error(msg)
           throw new RuntimeException(msg)
         case Some(j) if j.getStatus.getError != null =>
-          val msg = s"Job $jobId failed with message: " + j.getStatus.getError.getMessage
+          val msg = s"Job failed with message: " + j.getStatus.getError.getMessage
           logger.error(msg)
           throw new RuntimeException(msg)
         case _ =>
       }
-      logger.info(s"Finished loading partitions with QueryJob $jobId")
+      logger.info(s"Finished loading partitions")
     } else {
       val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_tmp_" + (System.currentTimeMillis()/1000L).toString
       logger.info("Loading partitions into temporary table " + tmpTableName)

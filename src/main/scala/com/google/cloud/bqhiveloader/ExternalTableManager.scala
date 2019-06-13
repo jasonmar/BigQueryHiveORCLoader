@@ -190,12 +190,14 @@ object ExternalTableManager extends Logging {
       .setAllowLargeResults(true)
       .build()
 
+    val job = jobid(destTableId)
     val jobId = JobId.newBuilder()
       .setProject(project)
       .setLocation(location)
-      .setJob(jobid(destTableId))
+      .setJob(job)
       .build()
 
+    logger.info(s"Creating Job with id $job")
     createJob(bq, jobId, query)
   }
 
@@ -203,8 +205,13 @@ object ExternalTableManager extends Logging {
     try {
       bq.create(JobInfo.of(jobId, jobConfiguration))
     } catch {
-      case _: BigQueryException =>
-        bq.getJob(jobId)
+      case e: BigQueryException =>
+        if (e.getMessage.contains("Already Exists")) {
+          bq.getJob(jobId)
+        } else {
+          logger.error(s"failed to create job: ${e.getMessage}", e)
+          throw e
+        }
     }
   }
 
