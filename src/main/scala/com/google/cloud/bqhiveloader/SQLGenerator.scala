@@ -84,9 +84,6 @@ object SQLGenerator {
         }
       }
 
-    val tableSpec = extTable.getProject + "." + extTable.getDataset + "." + extTable.getTable
-    s"""select
-       |  ${(partVals ++ fields).mkString(",\n  ")}
-       |from `$tableSpec`""".stripMargin
+    s"""select ${(partVals ++ fields).mkString(", ")} from `${extTable.getProject}.${extTable.getDataset}.${extTable.getTable}`"""
   }
 }

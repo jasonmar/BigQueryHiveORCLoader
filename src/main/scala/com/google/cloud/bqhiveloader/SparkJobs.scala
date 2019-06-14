@@ -278,7 +278,7 @@ object SparkJobs extends Logging {
         dropColumns = c.dropColumns,
         keepColumns = c.keepColumns)
     }
-    val unionSQL = sql.mkString("\n\nUNION ALL\n\n")
+    val unionSQL = sql.mkString("\nUNION ALL\n")
     logger.info(s"Generated SQL with length ${unionSQL.length}")
     if (unionSQL.length < MaxSQLLength) {
       logger.debug("Submitting Query:\n" + unionSQL)
