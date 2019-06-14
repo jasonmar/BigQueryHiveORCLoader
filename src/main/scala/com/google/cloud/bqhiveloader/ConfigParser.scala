@@ -149,6 +149,10 @@ object ConfigParser extends scopt.OptionParser[Config]("BQHiveLoader") {
     .action{(x, c) => c.copy(dryRun = x)}
     .text("(optional) When specified, requests are logged and not submitted to BigQuery (default: false)")
 
+  opt[Boolean]("useTempTable")
+    .action{(x, c) => c.copy(useTempTable = x)}
+    .text("(optional) When specified, generated SQL greater than 1MB will fallback to using a temp table and separate job for each partition (default: false)")
+
   help("help")
     .text("prints this usage text")
 

@@ -36,7 +36,7 @@ import org.threeten.bp.Duration
 object SparkJobs extends Logging {
   val BigQueryScope = "https://www.googleapis.com/auth/bigquery"
   val StorageScope = "https://www.googleapis.com/auth/devstorage.read_write"
-  val MaxSQLLength: Int = 12 * 1024 * 1024
+  val MaxSQLLength: Int = 1024 * 1024
 
   def run(config: Config): Unit = {
     val spark = SparkSession
@@ -299,6 +299,10 @@ object SparkJobs extends Logging {
       }
       logger.info(s"Finished loading partitions")
     } else {
+      if (!c.useTempTable) {
+        val msg = s"Generated SQL with length ${unionSQL.length} but useTempTable is set to false. Reduce number of selected partitions or add --useTempTable flag."
+        throw new RuntimeException(msg)
+      }
       val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_tmp_" + (System.currentTimeMillis()/1000L).toString
       logger.info("Loading partitions into temporary table " + tmpTableName)
 

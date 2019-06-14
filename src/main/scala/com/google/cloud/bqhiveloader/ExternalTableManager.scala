@@ -18,7 +18,6 @@ package com.google.cloud.bqhiveloader
 
 import java.util.Calendar
 
-import com.google.cloud.RetryOption
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
 import com.google.cloud.bigquery._
@@ -28,9 +27,8 @@ import com.google.cloud.storage.Storage
 import com.google.common.base.Preconditions
 import com.google.common.io.BaseEncoding
 import org.apache.spark.sql.types.StructType
-import org.threeten.bp.Duration
 
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.Random
 
 object ExternalTableManager extends Logging {
   sealed trait StorageFormat
