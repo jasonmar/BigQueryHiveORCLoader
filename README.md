@@ -158,6 +158,36 @@ If data from outside the specified date is included from the source Hive table, 
 Users must verify that the provided partition filters select all Hive partitions intended to be included in the specified BigQuery partition. 
 
 
+### Drop, Keep or Rename Columns
+
+The `--drop` `--keep` and `--rename` options enable modification of the columns included in the table to be loaded.
+
+#### Drop Columns
+
+Drop is to exclude a limited number of columns from the destination BigQuery table.
+
+Example:
+
+`--drop col1,col2`
+
+#### Keep Columns
+
+Keep is used to whitelist a limited number of columns to be included in the destination BigQuery table. Any columns not included in the list will not be loaded.
+
+Example:
+
+`--keep col1,col2`
+
+
+#### Rename Columns
+
+Rename modifies the name of the column in the Destination BigQuery table. If the loader utility creates the destination table, the table will have the new name. If the destination table already exists, the rename feature enables loading from a source table with different column names.
+
+Example:
+
+`--rename oldname1=newname1,oldname2,newname2`
+
+
 
 ### Help Text
 
@@ -177,6 +207,7 @@ BigQuery Hive Loader is a command-line utility for loading Hive partitions into 
   --clusterCols <value>    (optional) Cluster columns if creating BigQuery table (default: None)
   --drop <value>           (optional) Comma-separated list of columns to be ignored (default: None)
   --keep <value>           (optional) Comma-separated list of columns to be loaded; all others will be ignored (default: None)
+  --rename <value>         (optional) Column rename rules. Provided as comma separated key/value pairs oldname=newName. Example: 'dt=date,mth=month' (default: None)
   --partColFormats <value>
                            (optional) Partition Column format to be used to parse INTEGER or STRING type partition column as DATE. Provided as comma separated key/value pairs col=fmt. Example: 'date=%Y-%m-%d,month=YYYYMM' (default: None)
   --hiveJdbcUrl <value>    Hive JDBC connection string (required)
@@ -201,6 +232,7 @@ BigQuery Hive Loader is a command-line utility for loading Hive partitions into 
   --krbKeyTab <value>      (optional) Kerberos keytab location (path/to/krb5.keytab)
   --krbPrincipal <value>   (optional) Kerberos principal (user@realm or service/host@realm)
   --dryRun <value>         (optional) When specified, requests are logged and not submitted to BigQuery (default: false)
+  --useTempTable <value>   (optional) When specified, generated SQL greater than 1MB will fallback to using a temp table and separate job for each partition (default: false)
   --help                   prints this usage text
 ```
 

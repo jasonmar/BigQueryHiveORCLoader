@@ -17,6 +17,9 @@
 package com.google.cloud.bqhiveloader
 
 object ConfigParser extends scopt.OptionParser[Config]("BQHiveLoader") {
+  private val DefaultConfig = Config()
+  def parse(args: Array[String]): Option[Config] = parse(args, DefaultConfig)
+
   head("BQHiveLoader", "0.1")
 
   note("BigQuery Hive Loader is a command-line utility for loading Hive partitions into BigQuery\n")
