@@ -156,6 +156,10 @@ object ConfigParser extends scopt.OptionParser[Config]("BQHiveLoader") {
     .action{(x, c) => c.copy(useTempTable = x)}
     .text("(optional) When specified, generated SQL greater than 1MB will fallback to using a temp table and separate job for each partition (default: false)")
 
+  opt[Boolean]("useTempViews")
+    .action{(x, c) => c.copy(useTempViews = x)}
+    .text("(optional) When specified, generated SQL greater than 1MB will fallback to defining multiple temporary views but still attempt to load without a temp table in a single Query Job that selects from the views (default: false)")
+
   help("help")
     .text("prints this usage text")
 

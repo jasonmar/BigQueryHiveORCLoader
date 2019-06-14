@@ -23,6 +23,7 @@ import com.google.api.gax.retrying.RetrySettings
 import com.google.api.gax.rpc.FixedHeaderProvider
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.RetryOption
+import com.google.cloud.bigquery.BigQuery.TableOption
 import com.google.cloud.bigquery._
 import com.google.cloud.bqhiveloader.ExternalTableManager.{Orc, createExternalTable, hasOrcPositionalColNames, waitForCreation}
 import com.google.cloud.bqhiveloader.MetaStore._
@@ -31,6 +32,8 @@ import org.apache.spark.SparkFiles
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.StructType
 import org.threeten.bp.Duration
+
+import scala.util.Try
 
 
 object SparkJobs extends Logging {
@@ -298,11 +301,47 @@ object SparkJobs extends Logging {
         case _ =>
       }
       logger.info(s"Finished loading partitions")
-    } else {
-      if (!c.useTempTable) {
-        val msg = s"Generated SQL with length ${unionSQL.length} but useTempTable is set to false. Reduce number of selected partitions or add --useTempTable flag."
-        throw new RuntimeException(msg)
+    } else if (c.useTempViews) {
+      logger.info("Creating temporary views")
+      val t = System.currentTimeMillis() / 1000
+      val views = SQLGenerator.createViews(sql)
+        .zipWithIndex
+        .map { x =>
+          val (query, i) = x
+          val viewName = s"vw_${c.bqTable}_${i}_$t"
+          val tableId = TableId.of(c.bqProject, c.tempDataset, viewName)
+          bigqueryCreate.create(TableInfo.of(tableId, ViewDefinition.of(query)))
+          tableId
+        }
+
+      logger.info("Finished creating temporary views")
+
+      val viewSQL = SQLGenerator.generateSelectFromViews(views, filteredSchema)
+
+      logger.debug("Submitting Query:\n" + viewSQL)
+      val destTableId = TableId.of(c.bqProject, c.bqDataset, c.bqTable)
+      val queryJob = ExternalTableManager.runQuery(viewSQL, destTableId, c.bqProject,
+        c.bqLocation, c.dryRun, c.bqOverwrite, c.bqBatch, bigqueryWrite)
+      logger.info(s"Waiting for Job")
+      scala.Option(queryJob.waitFor(RetryOption.totalTimeout(Duration.ofHours(8)))) match {
+        case None =>
+          val msg = s"Job doesn't exist"
+          logger.error(msg)
+          throw new RuntimeException(msg)
+        case Some(j) if j.getStatus.getError != null =>
+          val msg = s"Job failed with message: " + j.getStatus.getError.getMessage
+          logger.error(msg)
+          throw new RuntimeException(msg)
+        case _ =>
       }
+      logger.info(s"Finished loading partitions")
+      logger.info(s"Deleting temporary views")
+      views.foreach{x =>
+        Try(bigqueryCreate.delete(x))
+          .failed.foreach{y => logger.error(s"Failed to delete ${x.getDataset}.${x.getTable}")}
+      }
+      logger.info(s"Finished deleting temporary views")
+    } else if (c.useTempTable) {
       val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_tmp_" + (System.currentTimeMillis()/1000L).toString
       logger.info("Loading partitions into temporary table " + tmpTableName)
 
@@ -352,6 +391,9 @@ object SparkJobs extends Logging {
         c.bqProject, c.bqDataset, c.bqTable, destPartition = c.refreshPartition,
         bq = bigqueryWrite, dryRun = c.dryRun, batch = c.bqBatch)
       logger.info(s"Finished loading ${c.bqTable}")
+    } else {
+      val msg = s"Generated SQL with length ${unionSQL.length} but useTempTable is set to false. Reduce number of selected partitions or add --useTempTable flag."
+      throw new RuntimeException(msg)
     }
   }
 }

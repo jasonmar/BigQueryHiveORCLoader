@@ -16,10 +16,12 @@
 
 package com.google.cloud.bqhiveloader
 
-import com.google.cloud.bigquery.TableId
+import com.google.cloud.bigquery.{Table, TableId}
 import com.google.cloud.bqhiveloader.ExternalTableManager.format
 import com.google.cloud.bqhiveloader.MetaStore.Partition
 import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
+
+import scala.collection.mutable.ArrayBuffer
 
 object SQLGenerator {
   def generateSelectFromExternalTable(extTable: TableId,
@@ -84,6 +86,48 @@ object SQLGenerator {
         }
       }
 
-    s"""select ${(partVals ++ fields).mkString(", ")} from `${extTable.getProject}.${extTable.getDataset}.${extTable.getTable}`"""
+    s"""select ${(partVals ++ fields).mkString(",")} from `${extTable.getProject}.${extTable.getDataset}.${extTable.getTable}`"""
+  }
+
+  def generateSelectFromViews(tables: Seq[TableId], schema: StructType): String = {
+    val columns = schema.map(_.name).mkString(",")
+    val selectQueries = tables
+      .map(x => s"""select $columns from `${x.getProject}.${x.getDataset}.${x.getTable}`""")
+
+    s"select * from (\n${selectQueries.mkString("\nunion all\n")}\n) q"
+  }
+
+  class ViewBuilder {
+    private val maxSize = 1024*1024
+    private val sb = new StringBuilder(maxSize)
+    private val views = ArrayBuffer.empty[String]
+
+    def + (sql: String): ViewBuilder = {
+      if (sb.isEmpty) {
+        sb.append(sql)
+      } else if (sb.length + sql.length < maxSize) {
+        sb.append("\nUNION ALL\n")
+        sb.append(sql)
+      } else {
+        flush()
+      }
+      this
+    }
+
+    private def flush(): Unit = {
+      if (sb.nonEmpty) {
+        views.append(sb.result())
+        sb.clear()
+      }
+    }
+
+    def result(): Seq[String] = {
+      flush()
+      views.result().toArray.toSeq
+    }
+  }
+
+  def createViews(sql: Seq[String]): Seq[String] = {
+    sql.foldLeft(new ViewBuilder)(_ + _).result()
   }
 }
