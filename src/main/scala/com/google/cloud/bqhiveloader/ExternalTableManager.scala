@@ -16,7 +16,7 @@
 
 package com.google.cloud.bqhiveloader
 
-import java.util.Calendar
+import java.util.{Calendar, Date}
 
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
@@ -361,8 +361,23 @@ object ExternalTableManager extends Logging {
     cal.get(Calendar.DAY_OF_WEEK)
   }
 
+  def simpleYrWk(yr: Int, week: Int, calendar: Calendar): Calendar = {
+    require(week >= 1 && week <= 53, "week must be in range [1,53]")
+    require(yr >= 1950 && yr < 2100, "yr must be in range [1950,2100]")
+    calendar.set(yr, Calendar.JANUARY,1)
+    calendar.add(Calendar.DATE, (week-1) * 7)
+    calendar
+  }
+
+  def printDate(cal: Calendar): String = {
+    val year = cal.get(Calendar.YEAR)
+    val month = f"${cal.get(Calendar.MONTH)+1}%02d"
+    val day = f"${cal.get(Calendar.DAY_OF_MONTH)}%02d"
+    s"$year-$month-$day"
+  }
+
   def getAsDate(s: String, fmt: String): String = {
-    if (fmt == "YYYYWW" || fmt == "%Y%U" || fmt == "%Y%V" || fmt == "%Y%W") {
+    if (fmt == "YYYYWW" || fmt == "%Y%U" || fmt == "%Y%V" || fmt == "%Y%W" || fmt == "YRWK") {
       Preconditions.checkArgument(s.matches("""^\d{6}$"""))
       val y = s.substring(0,4).toInt
       val week = s.substring(4,6).toInt
@@ -382,11 +397,10 @@ object ExternalTableManager extends Logging {
       } else if (fmt == "YYYYWW") {
         // Week (01-53) (Sunday as the first day of the week)
         cal.setWeekDate(y, week, Calendar.SUNDAY)
+      } else if (fmt == "YRWK") {
+        simpleYrWk(y, week, cal)
       }
-      val year = cal.get(Calendar.YEAR)
-      val month = f"${cal.get(Calendar.MONTH)+1}%02d"
-      val day = f"${cal.get(Calendar.DAY_OF_MONTH)}%02d"
-      s"$year-$month-$day"
+      printDate(cal)
     } else ""
   }
 }

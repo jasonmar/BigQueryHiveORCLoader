@@ -1,10 +1,11 @@
-# BigQuery Hive Loader
+# BigQuery Hive External Table Loader
 
-This utility copies data from ORC files into BigQuery tables from a BigQuery Permanent External Table using Federated Formats.
-It queries Hive to retrieve partition information and generates SQL to set partition values not stored in the ORC file.
+The BigQuery Hive External Table Loader is a command-line utility that launches a Spark Job to load data from ORC or Parquet Hive External Tables into BigQuery.
+The utility queries Hive Metastore to retrieve partition information and generates SQL to set partition values not stored in the ORC file.
+It manages creation of intermediate BigQuery Federated Formats External Tables and submits a query to select from the external table into a native BigQuery table.
 
 
-## Problems Solved by BigQuery Hive Loader
+## Problems Solved by BigQuery Hive External Table Loader
 
 ### ORC Positional Column Name
 
@@ -109,6 +110,7 @@ Supported formats:
 * `%Y%U` - week of year (00-53) Sunday as first day
 * `%Y%V` - week of year (01-53) Monday as first day; If the week containing January 1 has four or more days in the new year, then it is week 1; otherwise it is week 53 of the previous year, and the next week is week 1.
 * `%Y%W` - week of year (01-53) Monday as first day
+* `YRWK` - week of year (01-53) January 1 as start of Week 1
 
 For additional information see [BigQuery DATE Format Elements](https://cloud.google.com/bigquery/docs/reference/standard-sql/date_functions#supported-format-elements-for-date)
 

@@ -128,6 +128,7 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll {
     val fmt = "%Y%U"
     val fmt2 = "YYYYWW"
     val fmt3 = "%Y%V"
+
     assert(getAsDate("201900", fmt) == "2018-12-30")
     assert(getAsDate("201901", fmt) == "2019-01-06")
     assert(getAsDate("201902", fmt) == "2019-01-13")
@@ -135,5 +136,27 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll {
     assert(getAsDate("201902", fmt2) == "2019-01-06")
     assert(getAsDate("201901", fmt3) == "2018-12-31")
     assert(getAsDate("201701", fmt3) == "2017-01-09")
+  }
+
+  it should "parse YRWK" in {
+    import ExternalTableManager._
+    val fmt = "YRWK"
+    assert(getAsDate("201901", fmt) == "2019-01-01")
+    assert(getAsDate("201902", fmt) == "2019-01-08")
+    assert(getAsDate("201951", fmt) == "2019-12-17")
+    assert(getAsDate("201952", fmt) == "2019-12-24")
+    assert(getAsDate("201953", fmt) == "2019-12-31")
+
+    assert(getAsDate("202001", fmt) == "2020-01-01")
+    assert(getAsDate("202002", fmt) == "2020-01-08")
+    assert(getAsDate("202051", fmt) == "2020-12-16")
+    assert(getAsDate("202052", fmt) == "2020-12-23")
+    assert(getAsDate("202053", fmt) == "2020-12-30")
+
+    assert(getAsDate("202101", fmt) == "2021-01-01")
+    assert(getAsDate("202102", fmt) == "2021-01-08")
+    assert(getAsDate("202151", fmt) == "2021-12-17")
+    assert(getAsDate("202152", fmt) == "2021-12-24")
+    assert(getAsDate("202153", fmt) == "2021-12-31")
   }
 }
