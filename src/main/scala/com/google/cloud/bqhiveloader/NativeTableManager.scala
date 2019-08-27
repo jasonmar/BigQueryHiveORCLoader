@@ -19,7 +19,7 @@ package com.google.cloud.bqhiveloader
 import com.google.cloud.RetryOption
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
-import com.google.cloud.bigquery._
+import com.google.cloud.bigquery.{BigQuery,TableResult,TableInfo,Table,TableId,QueryJobConfiguration,Job,JobId,JobInfo,StandardTableDefinition,TimePartitioning,Clustering}
 import com.google.cloud.bqhiveloader.ExternalTableManager.jobid
 import org.apache.spark.sql.types.{DateType, StructType}
 import org.threeten.bp.Duration

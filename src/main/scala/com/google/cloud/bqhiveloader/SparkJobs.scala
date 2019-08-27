@@ -23,8 +23,7 @@ import com.google.api.gax.retrying.RetrySettings
 import com.google.api.gax.rpc.FixedHeaderProvider
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.RetryOption
-import com.google.cloud.bigquery.BigQuery.TableOption
-import com.google.cloud.bigquery._
+import com.google.cloud.bigquery.{BigQuery,BigQueryOptions,TableInfo,TableId,ViewDefinition}
 import com.google.cloud.bqhiveloader.ExternalTableManager.{Orc, createExternalTable, hasOrcPositionalColNames, waitForCreation}
 import com.google.cloud.bqhiveloader.MetaStore._
 import com.google.cloud.storage.{Storage, StorageOptions}
@@ -131,13 +130,22 @@ object SparkJobs extends Logging {
       .filter(_.nonEmpty)
   }
 
-  /** Spark Job to create external table and create BigQuery load job
-    * The data is not touched, this is launched as a remote job to use
-    * a Service Account Key File located on the worker node.
+  /** loadPartitions loads Hive External Table partitions into BigQuery.
+    * External table creation is a metadata only operation.
+    * No Data in GCS is read by this job.
+    * This was originally designed as a Spark job in order to access
+    * Service Account Key Files accessible only on a worker node.
     *
-    * @param c
-    * @param table
-    * @param partitions
+    * This function performs the following actions:
+    * 1) Load credentials from local filesystem
+    * 2) Create BigQuery External Table from GCS paths
+    *    where Hive table data is stored as ORC or Parquet
+    * 3) Submit BigQuery load job to select from External Table
+    *    into native table
+    *
+    * @param c Config object
+    * @param table table information from Hive metastore
+    * @param partitions partition ids being targeted
     */
   def loadPartitions(c: Config, table: TableMetadata, partitions: Seq[Partition]): Unit = {
     for {

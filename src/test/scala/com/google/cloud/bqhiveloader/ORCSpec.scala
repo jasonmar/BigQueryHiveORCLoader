@@ -17,7 +17,7 @@
 package com.google.cloud.bqhiveloader
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{StructType,StructField,StringType,LongType,IntegerType,DoubleType}
 import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
