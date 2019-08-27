@@ -102,15 +102,23 @@ object SparkJobs extends Logging {
         }
       }
     val sc = spark.sparkContext
+
+    // function which will accept a Config and load the targeted partitions from the table
+    val sparkFunction: Iterator[Config] => Unit =
+      loadPartitionsJob(table, partitions)
+
+    // Submit the Job to the cluster
     sc.runJob(rdd = sc.makeRDD(Seq(config), numSlices = 1),
-              func = loadPartitionsJob(table, partitions))
+              func = sparkFunction)
   }
 
-  /** Spark Job
+  /** loadPartitionsJob creates function that accepts a Config object
+    * The function returned is accepted by SparkContext#runJob()
+    * then serialized as a Spark Job and executed as a Task on a Worker node
     *
-    * @param table
-    * @param partitions
-    * @return
+    * @param table table information from Hive metastore
+    * @param partitions partition ids being targeted
+    * @return function with signature Iterator[Config] => Unit to be used by SparkContext#runJob()
     */
   def loadPartitionsJob(table: TableMetadata, partitions: Seq[Partition]): Iterator[Config] => Unit =
     (it: Iterator[Config]) => loadPartitions(it.next, table, partitions)
