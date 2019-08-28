@@ -16,10 +16,13 @@
 
 package com.google.cloud.bqhiveloader
 
+import java.util
+import java.util.Map
+
 import com.google.cloud.RetryOption
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
-import com.google.cloud.bigquery.{BigQuery,TableResult,TableInfo,Table,TableId,QueryJobConfiguration,Job,JobId,JobInfo,StandardTableDefinition,TimePartitioning,Clustering}
+import com.google.cloud.bigquery.{BigQuery, Clustering, Job, JobId, JobInfo, QueryJobConfiguration, RangePartitioningUtil, StandardTableDefinition, Table, TableId, TableInfo, TableResult, TimePartitioning}
 import com.google.cloud.bqhiveloader.ExternalTableManager.jobid
 import org.apache.spark.sql.types.{DateType, StructType}
 import org.threeten.bp.Duration
@@ -40,14 +43,14 @@ object NativeTableManager extends Logging {
       .build())
   }
 
-  def createTableIfNotExists(project: String, dataset: String, table: String, c: Config, schema: StructType, bigquery: BigQuery, expirationMs: scala.Option[Long] = None): Boolean = {
+  def createTableIfNotExists(project: String, dataset: String, table: String, c: Config, schema: StructType, bigquery: BigQuery, bql: com.google.api.services.bigquery.Bigquery, expirationMs: scala.Option[Long] = None): Boolean = {
     val tableId = TableId.of(project, dataset, table)
-    createTableIfNotExistsWithId(c, schema, tableId, bigquery, expirationMs)
+    createTableIfNotExistsWithId(c, schema, tableId, bigquery, bql, expirationMs)
   }
 
-  def createTableIfNotExistsWithId(c: Config, schema: StructType, tableId: TableId, bigquery: BigQuery, expirationMs: scala.Option[Long] = None): Boolean = {
+  def createTableIfNotExistsWithId(c: Config, schema: StructType, tableId: TableId, bigquery: BigQuery, bql: com.google.api.services.bigquery.Bigquery, expirationMs: scala.Option[Long] = None): Boolean = {
     if (!ExternalTableManager.tableExists(tableId, bigquery)) {
-      createTable(c, schema, tableId, bigquery, expirationMs)
+      createTable(c, schema, tableId, bigquery, bql, expirationMs)
       true
     } else false
   }
@@ -107,7 +110,7 @@ object NativeTableManager extends Logging {
     else scala.Option(ExternalTableManager.createJob(bq, jobId, jobConfig))
   }
 
-  def createTable(c: Config, schema: StructType, destTableId: TableId, bigquery: BigQuery, expirationMs: scala.Option[Long] = None): Table ={
+  def createTable(c: Config, schema: StructType, destTableId: TableId, bigquery: BigQuery, bql: com.google.api.services.bigquery.Bigquery, expirationMs: scala.Option[Long] = None): Table ={
     require(c.clusterColumns.nonEmpty, "destination table does not exist, clusterColumns must not be empty")
     require(c.partitionColumn.nonEmpty, "destination table does not exist, partitionColumn must not be empty")
     val destTableSchema = if (c.partitionColumn.map(_.toLowerCase).contains("none")) {
@@ -131,6 +134,12 @@ object NativeTableManager extends Logging {
       .setLocation(c.bqLocation)
       .setSchema(destTableSchema)
 
+    if (c.clusterColumns.map(_.toLowerCase) != Seq("none")) {
+      import scala.collection.JavaConverters.seqAsJavaListConverter
+      destTableDefBuilder.setClustering(Clustering.newBuilder()
+        .setFields(c.clusterColumns.map(_.toLowerCase).asJava).build())
+    }
+
     if (c.partitionColumn.contains("none") && c.clusterColumns.exists(_ != "none")) {
       // Only set null partition column if both partition column and cluster columns are provided
       destTableDefBuilder
@@ -138,7 +147,7 @@ object NativeTableManager extends Logging {
           .newBuilder(TimePartitioning.Type.DAY)
           .setField(c.unusedColumnName)
           .build())
-    } else {
+    } else if (c.partitionType == "DAY") {
       c.partitionColumn match {
         case Some(partitionCol) if partitionCol != "none" =>
           // Only set partition column if partition column is set
@@ -152,16 +161,16 @@ object NativeTableManager extends Logging {
       }
     }
 
-    if (c.clusterColumns.map(_.toLowerCase) != Seq("none")) {
-      import scala.collection.JavaConverters.seqAsJavaListConverter
-      destTableDefBuilder.setClustering(Clustering.newBuilder()
-        .setFields(c.clusterColumns.map(_.toLowerCase).asJava).build())
+    val tableInfoBuilder = TableInfo.newBuilder(destTableId, destTableDefBuilder.build())
+
+    expirationMs.foreach(x => tableInfoBuilder.setExpirationTime(System.currentTimeMillis() + x))
+
+    if (c.partitionType == "RANGE" && c.partitionColumn.isDefined) {
+      val tableInfo = tableInfoBuilder.build()
+      RangePartitioningUtil.createTable(destTableId.getProject, destTableId.getDataset, tableInfo, bql, c.partitionColumn.get, c.partitionRangeStart, c.partitionRangeEnd, c.partitionRangeInterval)
+      bigquery.getTable(tableInfo.getTableId)
+    } else {
+      bigquery.create(tableInfoBuilder.build())
     }
-
-    val tableInfo = TableInfo.newBuilder(destTableId, destTableDefBuilder.build())
-
-    expirationMs.foreach(x => tableInfo.setExpirationTime(System.currentTimeMillis() + x))
-
-    bigquery.create(tableInfo.build())
   }
 }

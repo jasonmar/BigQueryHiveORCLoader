@@ -26,8 +26,8 @@ val exGuava = ExclusionRule("com.google.guava")
 
 libraryDependencies ++= Seq(
   "com.google.guava" % "guava" % "27.1-jre",
-  "com.google.cloud" % "google-cloud-bigquery" % "1.82.0",
-  "com.google.cloud" % "google-cloud-storage" % "1.82.0",
+  "com.google.cloud" % "google-cloud-bigquery" % "1.88.0",
+  "com.google.cloud" % "google-cloud-storage" % "1.88.0",
   "log4j" % "log4j" % "1.2.17"
 )
 

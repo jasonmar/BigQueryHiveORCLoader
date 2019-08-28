@@ -36,6 +36,26 @@ object ConfigParser extends scopt.OptionParser[Config]("BQHiveLoader") {
     .action{(x, c) => c.copy(partitionColumn = Option(x.toLowerCase))}
     .text("(optional) Partition column name (default: None)")
 
+  opt[String]("partitionType")
+    .action{(x, c) => c.copy(partitionType = x)}
+    .text("(optional) Partition type [DAY|RANGE] (default: DAY)")
+    .validate{s =>
+      if (Set("DAY","RANGE").contains(s)) success
+      else failure(s"partitionType '$s' is not valid. Must be DAY or RANGE")
+    }
+
+  opt[Long]("partitionRangeStart")
+    .action{(x, c) => c.copy(partitionRangeStart = x)}
+    .text("(optional) Range Partition start value")
+
+  opt[Long]("partitionRangeEnd")
+    .action{(x, c) => c.copy(partitionRangeEnd = x)}
+    .text("(optional) Range Partition end value")
+
+  opt[Long]("partitionRangeInterval")
+    .action{(x, c) => c.copy(partitionRangeInterval = x)}
+    .text("(optional) Range Partition interval value")
+
   opt[String]("refreshPartition")
     .action{(x, c) => c.copy(refreshPartition = Option(x))}
     .text("BigQuery partition ID to refresh, formatted YYYYMMDD (default: None)")
@@ -180,6 +200,13 @@ object ConfigParser extends scopt.OptionParser[Config]("BQHiveLoader") {
       failure("keepColumns contains invalid column names")
     else if (c.dropColumns.nonEmpty && c.dropColumns.exists(!ExternalTableManager.validBigQueryColumnName(_)))
       failure("dropColumns contains invalid column names")
-    else success
+    else if (c.partitionType == "RANGE" &&
+      (c.partitionRangeEnd <= c.partitionRangeStart ||
+          c.partitionRangeEnd < 1 || c.partitionRangeStart < 1)
+    ){
+      failure("partitionRangeEnd must be greater than partitionRangeStart and both must be positive integers")
+    } else if (c.partitionType == "RANGE" && c.partitionRangeInterval < 1){
+      failure("invalid partitionRangeInterval")
+    } else success
   }
 }

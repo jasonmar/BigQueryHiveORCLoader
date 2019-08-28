@@ -23,7 +23,7 @@ import com.google.api.gax.retrying.RetrySettings
 import com.google.api.gax.rpc.FixedHeaderProvider
 import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.RetryOption
-import com.google.cloud.bigquery.{BigQuery,BigQueryOptions,TableInfo,TableId,ViewDefinition}
+import com.google.cloud.bigquery.{BigQuery, BigQueryOptions, RangePartitioningUtil, TableId, TableInfo, ViewDefinition}
 import com.google.cloud.bqhiveloader.ExternalTableManager.{Orc, createExternalTable, hasOrcPositionalColNames, waitForCreation}
 import com.google.cloud.bqhiveloader.MetaStore._
 import com.google.cloud.storage.{Storage, StorageOptions}
@@ -228,7 +228,7 @@ object SparkJobs extends Logging {
       .setLocation(c.bqLocation)
       .setCredentials(bqCreateCredentials)
       .setProjectId(c.bqProject)
-      .setHeaderProvider(FixedHeaderProvider.create("user-agent", "BQHiveLoader 0.1"))
+      .setHeaderProvider(FixedHeaderProvider.create("user-agent", BQHiveLoader.UserAgent))
       .setRetrySettings(retrySettings)
       .build()
       .getService
@@ -237,15 +237,17 @@ object SparkJobs extends Logging {
       .setLocation(c.bqLocation)
       .setCredentials(bqWriteCredentials)
       .setProjectId(c.bqProject)
-      .setHeaderProvider(FixedHeaderProvider.create("user-agent", "BQHiveLoader 0.1"))
+      .setHeaderProvider(FixedHeaderProvider.create("user-agent", BQHiveLoader.UserAgent))
       .setRetrySettings(retrySettings)
       .build()
       .getService
 
+    val bql: com.google.api.services.bigquery.Bigquery = RangePartitioningUtil.bq(bqCreateCredentials)
+
     val gcs: Storage = StorageOptions.newBuilder()
       .setCredentials(storageCreds)
       .setProjectId(c.bqProject)
-      .setHeaderProvider(FixedHeaderProvider.create("user-agent", "BQHiveLoader 0.1"))
+      .setHeaderProvider(FixedHeaderProvider.create("user-agent", BQHiveLoader.UserAgent))
       .setRetrySettings(retrySettings)
       .build()
       .getService
@@ -268,7 +270,7 @@ object SparkJobs extends Logging {
       })
 
     /* Create BigQuery table to be loaded */
-    NativeTableManager.createTableIfNotExists(c.bqProject, c.bqDataset, c.bqTable, c, filteredSchema, bigqueryWrite)
+    NativeTableManager.createTableIfNotExists(c.bqProject, c.bqDataset, c.bqTable, c, filteredSchema, bigqueryWrite, bql)
 
     val externalTables: Seq[(Partition,TableInfo, Boolean)] = partitions.map{part =>
       val extTable = createExternalTable(c.bqProject, c.tempDataset, c.bqTable,
@@ -361,7 +363,7 @@ object SparkJobs extends Logging {
       val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_tmp_" + (System.currentTimeMillis()/1000L).toString
       logger.info("Loading partitions into temporary table " + tmpTableName)
 
-      NativeTableManager.createTableIfNotExists(c.bqProject, c.tempDataset, tmpTableName, c, table.schema, bigqueryWrite, Some(Duration.ofHours(6).toMillis))
+      NativeTableManager.createTableIfNotExists(c.bqProject, c.tempDataset, tmpTableName, c, table.schema, bigqueryWrite, bql, Some(Duration.ofHours(6).toMillis))
 
       logger.info("Loading partitions from external tables")
       val tmpTableId = TableId.of(c.bqProject, c.tempDataset, tmpTableName)

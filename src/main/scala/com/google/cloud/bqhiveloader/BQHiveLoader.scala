@@ -17,6 +17,7 @@
 package com.google.cloud.bqhiveloader
 
 object BQHiveLoader extends Logging {
+  val UserAgent = "google-pso-tool/bq-hive-external-table-loader/1.0"
   def init(): Unit = {
     Util.configureLogging()
     Util.quietSparkLogs()
