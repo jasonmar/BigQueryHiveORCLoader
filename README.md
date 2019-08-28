@@ -159,6 +159,20 @@ If data from outside the specified date is included from the source Hive table, 
  
 Users must verify that the provided partition filters select all Hive partitions intended to be included in the specified BigQuery partition. 
 
+## Integer Range Partitioning
+
+To create a destination table with Integer Range Partitioning, add the following command line options: (modify to fit your actual start and end ranges)
+
+```
+--partitionRangeStart=199901
+--partitionRangeEnd=210001
+--partitionRangeInterval=10
+--partitionType=RANGE
+```
+
+This will create destination tables with the specified range partitioning. 
+
+Providing range partitioning here saves users the trouble of writing the `bq mk` command because this utility obtains the table definition from Hive metastore.
 
 ### Drop, Keep or Rename Columns
 
