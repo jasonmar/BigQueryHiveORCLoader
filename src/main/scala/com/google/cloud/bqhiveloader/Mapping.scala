@@ -16,8 +16,8 @@
 
 package com.google.cloud.bqhiveloader
 
-import com.google.cloud.bigquery.{Schema,Field,StandardSQLTypeName}
-import org.apache.spark.sql.types.DataTypes._
+import com.google.cloud.bigquery.{Field, Schema, StandardSQLTypeName}
+import org.apache.spark.sql.types.DataTypes.{BooleanType, ByteType, DateType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampType}
 import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, StructField, StructType}
 
 object Mapping {

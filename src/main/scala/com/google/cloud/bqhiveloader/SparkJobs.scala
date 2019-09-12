@@ -25,7 +25,7 @@ import com.google.auth.oauth2.GoogleCredentials
 import com.google.cloud.RetryOption
 import com.google.cloud.bigquery.{BigQuery, BigQueryOptions, RangePartitioningUtil, TableId, TableInfo, ViewDefinition}
 import com.google.cloud.bqhiveloader.ExternalTableManager.{Orc, createExternalTable, hasOrcPositionalColNames, waitForCreation}
-import com.google.cloud.bqhiveloader.MetaStore._
+import com.google.cloud.bqhiveloader.MetaStore.{ExternalCatalogMetaStore, MetaStore, Partition, SparkSQLMetaStore, TableMetadata}
 import com.google.cloud.storage.{Storage, StorageOptions}
 import org.apache.spark.SparkFiles
 import org.apache.spark.sql.SparkSession
@@ -284,6 +284,10 @@ object SparkJobs extends Logging {
       (part, extTable, renameOrcCols)
     }
 
+    /* We generate SQL for each of the external tables
+     * Each one is a distinct query because partition values
+     * may be selected as a literal value specific to that partition
+     */
     val sql: Seq[String] = externalTables.map{x =>
       val partition = x._1
       val extTableId = x._2.getTableId
@@ -299,9 +303,15 @@ object SparkJobs extends Logging {
         dropColumns = c.dropColumns,
         keepColumns = c.keepColumns)
     }
+
+    /* Our load operation needs to be atomic to prevent users from
+     * receiving partial results.
+     * The simplest way to achieve this is to union all the queries.
+     */
     val unionSQL = sql.mkString("\nUNION ALL\n")
     logger.info(s"Generated SQL with length ${unionSQL.length}")
     if (unionSQL.length < MaxSQLLength) {
+      /* Only proceed with this method if we are under the 1MB SQL limit. */
       logger.debug("Submitting Query:\n" + unionSQL)
       val destTableId = TableId.of(c.bqProject, c.bqDataset, c.bqTable)
       val queryJob = ExternalTableManager.runQuery(unionSQL, destTableId, c.bqProject,
@@ -320,6 +330,11 @@ object SparkJobs extends Logging {
       }
       logger.info(s"Finished loading partitions")
     } else if (c.useTempViews) {
+      /* If we are over the limit we have one more method to squeeze
+       * more SQL into a single Query Job by splitting our union all
+       * into multiple views, which we will then select from.
+       * This lets us use the 12MB SQL limit for resolved SQL.
+       */
       logger.info("Creating temporary views")
       val t = System.currentTimeMillis() / 1000
       val views = SQLGenerator.createViews(sql)
@@ -360,6 +375,14 @@ object SparkJobs extends Logging {
       }
       logger.info(s"Finished deleting temporary views")
     } else if (c.useTempTable) {
+      /* It's possible that the table has so many partitions and/or
+       * columns that the resolved SQL exceeds 12MB.
+       * We could take the risk of using "SELECT *" instead of naming
+       * columns, but as currently implemented we don't do that
+       * and simply fall back to the original method which appends
+       * each partition into a temp table before running an atomic select
+       * query job to load the temp table partitions into the destination table.
+       */
       val tmpTableName = c.bqTable + "_" + c.refreshPartition.getOrElse("") + "_tmp_" + (System.currentTimeMillis()/1000L).toString
       logger.info("Loading partitions into temporary table " + tmpTableName)
 

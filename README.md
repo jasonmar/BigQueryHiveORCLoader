@@ -208,7 +208,7 @@ Example:
 ### Help Text
 
 ```
-BQHiveLoader 0.1
+BQHiveLoader google-pso-tool/bq-hive-external-table-loader/1.0
 Usage: BQHiveLoader [options]
 
 BigQuery Hive Loader is a command-line utility for loading Hive partitions into BigQuery
@@ -217,6 +217,13 @@ BigQuery Hive Loader is a command-line utility for loading Hive partitions into 
   --partFilters <value>    (optional) Partition filter expression. Example: 'date > 2019-04-18 AND region IN (A,B,C) AND part = *'
   --partitionColumn <value>
                            (optional) Partition column name (default: None)
+  --partitionType <value>  (optional) Partition type [DAY|RANGE] (default: DAY)
+  --partitionRangeStart <value>
+                           (optional) Range Partition start value
+  --partitionRangeEnd <value>
+                           (optional) Range Partition end value
+  --partitionRangeInterval <value>
+                           (optional) Range Partition interval value
   --refreshPartition <value>
                            BigQuery partition ID to refresh, formatted YYYYMMDD (default: None)
   --tempDataset <value>    Temporary BigQuery Dataset name where Hive partitions will be stored prior to select into the refresh partition (required if refreshPartition is set)
@@ -249,6 +256,7 @@ BigQuery Hive Loader is a command-line utility for loading Hive partitions into 
   --krbPrincipal <value>   (optional) Kerberos principal (user@realm or service/host@realm)
   --dryRun <value>         (optional) When specified, requests are logged and not submitted to BigQuery (default: false)
   --useTempTable <value>   (optional) When specified, generated SQL greater than 1MB will fallback to using a temp table and separate job for each partition (default: false)
+  --useTempViews <value>   (optional) When specified, generated SQL greater than 1MB will fallback to defining multiple temporary views but still attempt to load without a temp table in a single Query Job that selects from the views (default: false)
   --help                   prints this usage text
 ```
 

@@ -23,6 +23,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec}
 
 import scala.util.Random
 
+// For some reason this test only succeeds in IntelliJ
 class ORCSpec extends FlatSpec with BeforeAndAfterAll {
   private var sparkSession: Option[SparkSession] = None
   def getSpark: SparkSession = sparkSession.get

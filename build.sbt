@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-name := "bigquery-hive-orc-loader"
+name := "bigquery-hive-external-table-loader"
 
-version := "0.1.0"
+version := "1.0.0"
 
 scalaVersion := "2.11.11"
 
@@ -25,9 +25,9 @@ val sparkVersion = "2.3.0"
 val exGuava = ExclusionRule("com.google.guava")
 
 libraryDependencies ++= Seq(
-  "com.google.guava" % "guava" % "27.1-jre",
-  "com.google.cloud" % "google-cloud-bigquery" % "1.88.0",
-  "com.google.cloud" % "google-cloud-storage" % "1.88.0",
+  "com.google.guava" % "guava" % "28.1-jre",
+  "com.google.cloud" % "google-cloud-bigquery" % "1.91.0",
+  "com.google.cloud" % "google-cloud-storage" % "1.91.0",
   "log4j" % "log4j" % "1.2.17"
 )
 

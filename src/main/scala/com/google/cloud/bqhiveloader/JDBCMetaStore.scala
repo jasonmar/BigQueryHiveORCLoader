@@ -16,12 +16,12 @@
 
 package com.google.cloud.bqhiveloader
 
-import java.sql._
+import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, Types}
 
-import com.google.cloud.bqhiveloader.JDBCMetaStore._
 import com.google.cloud.bqhiveloader.MetaStore.{MetaStore, Partition, TableMetadata, mkPartSpec, parsePartitionTable}
 import com.google.cloud.bqhiveloader.PartitionFilters.PartitionFilter
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataTypes.{BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
 import scala.collection.mutable.ListBuffer
@@ -139,10 +139,10 @@ object JDBCMetaStore extends Logging {
 
 case class JDBCMetaStore(jdbcUrl: String, spark: SparkSession) extends MetaStore {
   @transient
-  private val con = connect(jdbcUrl)
+  private val con = JDBCMetaStore.connect(jdbcUrl)
 
   private def sql(query: String): DataFrame =
-    executeQuery(query, con, spark)
+    JDBCMetaStore.executeQuery(query, con, spark)
 
   override def listPartitions(db: String, table: String, partitionFilter: Option[PartitionFilter] = None): Seq[Partition] = {
     parsePartitionTable(sql(s"show partitions $db.$table"))
@@ -152,11 +152,11 @@ case class JDBCMetaStore(jdbcUrl: String, spark: SparkSession) extends MetaStore
       .flatMap{partValues =>
         val partSpec = mkPartSpec(partValues)
         val df = sql(s"describe formatted $db.$table partition($partSpec)")
-        parsePartitionDesc(partValues, df)
+        JDBCMetaStore.parsePartitionDesc(partValues, df)
       }
   }
 
   override def getTable(db: String, table: String): TableMetadata = {
-    parseTableDesc(sql(s"describe formatted $db.$table"))
+    JDBCMetaStore.parseTableDesc(sql(s"describe formatted $db.$table"))
   }
 }
