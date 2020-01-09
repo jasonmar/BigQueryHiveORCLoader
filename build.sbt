@@ -47,6 +47,8 @@ assemblyMergeStrategy in assembly := {
   case _ => MergeStrategy.first
 }
 
+test in assembly := Seq()
+
 assemblyJarName in assembly := "bqhiveloader.jar"
 
 assemblyShadeRules in assembly := Seq(
