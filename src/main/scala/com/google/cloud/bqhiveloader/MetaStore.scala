@@ -101,10 +101,13 @@ object MetaStore {
   def parseTableDesc(df: DataFrame): TableMetadata = {
     val tuples = df.drop("comment")
       .collect()
-      .map{row =>
+      .flatMap{row =>
         val colName = row.getString(row.fieldIndex("col_name"))
         val dataType = row.getString(row.fieldIndex("data_type"))
-        (colName, dataType)
+        val validDataType = dataType.nonEmpty && !dataType.equalsIgnoreCase("NULL")
+        if (colName.nonEmpty && validDataType)
+          Some((colName, dataType))
+        else None
       }
     parseTableDetails(tuples)
   }
