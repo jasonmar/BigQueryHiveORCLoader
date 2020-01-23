@@ -112,17 +112,23 @@ object MetaStore {
     parseTableDetails(tuples)
   }
 
+  def isColDef(s: String): Boolean = {
+    if (s.isEmpty) true
+    else if (!s.head.isUpper && s.head != '#') true
+    else false
+  }
+
   def parseTableDetails(data: Seq[(String,String)]): TableMetadata = {
     System.out.println("Parsing table details:\n" + data.map{x => x._1 + "\t" + x._2}.mkString("\n"))
-    val fields = data.takeWhile(!_._1.startsWith("#"))
+    val fields = data.takeWhile(x => isColDef(x._1))
       .filter(_._1.nonEmpty)
       .map(Mapping.convertTuple)
     val schema = StructType(fields)
 
     val partColNames = data.map(_._1)
-      .dropWhile(!_.startsWith("#"))
-      .dropWhile(_.startsWith("#"))
-      .takeWhile(_.trim.nonEmpty)
+      .dropWhile(isColDef) // columns
+      .dropWhile(!isColDef(_)) // table properties
+      .takeWhile(isColDef) // partition columns
 
     val location = data.find(_._1.startsWith("Location")).map(_._2)
 
