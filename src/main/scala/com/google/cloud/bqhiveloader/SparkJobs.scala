@@ -252,11 +252,6 @@ object SparkJobs extends Logging {
       .build()
       .getService
 
-    // TODO detect from metadata
-    val storageFormat = c.hiveStorageFormat
-        .map(ExternalTableManager.parseStorageFormat)
-        .getOrElse(Orc)
-
     val filteredSchema = StructType(table.schema
       .filterNot{x => c.dropColumns.contains(x.name)}
       .filter{x => c.keepColumns.contains(x.name) || c.keepColumns.isEmpty}
@@ -274,7 +269,7 @@ object SparkJobs extends Logging {
 
     val externalTables: Seq[(Partition,TableInfo, Boolean)] = partitions.map{part =>
       val extTable = createExternalTable(c.bqProject, c.tempDataset, c.bqTable,
-        table, part, storageFormat, bigqueryCreate, gcs, c.dryRun)
+        table, part, table.format, bigqueryCreate, gcs, c.dryRun)
 
       val renameOrcCols = if (!c.dryRun) {
         val creation = waitForCreation(extTable.getTableId, timeoutMillis = 120000L, bigqueryCreate)

@@ -16,12 +16,31 @@
 
 package com.google.cloud.bqhiveloader
 
+import com.google.cloud.bqhiveloader.ExternalTableManager.{Avro, Orc, Parquet, StorageFormat}
 import com.google.cloud.bqhiveloader.PartitionFilters.PartitionFilter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 object MetaStore {
-  case class TableMetadata(schema: StructType, partitionColumnNames: Seq[String], location: Option[String] = None, raw: Seq[(String,String)] = Seq.empty)
+  case class TableMetadata(schema: StructType,
+                           partitionColumnNames: Seq[String],
+                           location: Option[String] = None,
+                           raw: Seq[(String,String)] = Seq.empty) {
+    private def get(k: String): String = raw.find(_._1 == k).map(_._2).getOrElse("")
+    def format: StorageFormat = {
+      get("SerDe Library") match {
+        case "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe" =>
+          Parquet
+        case "org.apache.hadoop.hive.serde2.avro.AvroSerDe" =>
+          Avro
+        case "org.apache.hadoop.hive.ql.io.orc.OrcSerde" =>
+          Orc
+        case s =>
+          System.err.println(s"WARN unrecognized SerDe Library: '$s'")
+          Orc
+      }
+    }
+  }
 
   case class Partition(values: Seq[(String,String)], location: String)
 

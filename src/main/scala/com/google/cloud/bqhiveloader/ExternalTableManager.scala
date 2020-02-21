@@ -69,7 +69,7 @@ object ExternalTableManager extends Logging {
           .build()
       case Parquet =>
         ExternalTableDefinition
-          .newBuilder(sources.asJava, schema, FormatOptions.parquet())
+          .newBuilder(sources.asJava, null, FormatOptions.parquet())
           .build()
       case Avro =>
         ExternalTableDefinition

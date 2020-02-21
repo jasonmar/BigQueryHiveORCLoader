@@ -16,7 +16,7 @@
 
 package com.google.cloud.bqhiveloader
 
-import org.apache.spark.sql.SparkSession
+import com.google.cloud.bqhiveloader.MetaStore.TableMetadata
 import org.scalatest.FlatSpec
 
 class MetastoreSpec extends FlatSpec {
@@ -44,9 +44,10 @@ class MetastoreSpec extends FlatSpec {
       ("Storage Properties","[serialization.format=1]",""),
       ("Partition Provider","Catalog","")
     )
-    val result = MetaStore.parseTableDetails(test.map(x => (x._1, x._2)))
+    val result: TableMetadata = MetaStore.parseTableDetails(test.map(x => (x._1, x._2)))
     assert(result.schema.fields.length == 5)
     assert(result.location.contains("gs://bucket/dir/subdir"))
+    assert(result.format == ExternalTableManager.Orc)
   }
 
 }

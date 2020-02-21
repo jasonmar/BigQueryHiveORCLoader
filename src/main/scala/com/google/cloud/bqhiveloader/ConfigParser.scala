@@ -108,15 +108,6 @@ object ConfigParser extends scopt.OptionParser[Config]("BQHiveLoader") {
     .action{(x, c) => c.copy(hiveMetastoreType = x)}
     .text("(optional) Hive Metastore type (default: jdbc)")
 
-  opt[String]("hiveStorageFormat")
-    .action{(x, c) => c.copy(hiveStorageFormat = Option(x))}
-    .text("(optional) Hive storage format (default: orc)")
-    .validate{s =>
-      if (!Set("orc", "parquet", "avro").contains(s.toLowerCase))
-        failure(s"unrecognized storage format '$s'")
-      else success
-    }
-
   opt[String]("bqProject")
     .required()
     .action{(x, c) => c.copy(bqProject = x)}
