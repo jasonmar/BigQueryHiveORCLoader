@@ -26,18 +26,21 @@ object MetaStore {
                            partitionColumnNames: Seq[String],
                            location: Option[String] = None,
                            raw: Seq[(String,String)] = Seq.empty) {
-    private def get(k: String): String = raw.find(_._1 == k).map(_._2).getOrElse("")
+    private def get(k: String): String =
+      raw.find(_._1.toLowerCase.contains(k.toLowerCase)).map(_._2).getOrElse("")
+
     def format: StorageFormat = {
-      get("SerDe Library") match {
-        case "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe" =>
+      get("serde") match {
+        case s if s.toLowerCase.contains("parquet") =>
           Parquet
-        case "org.apache.hadoop.hive.serde2.avro.AvroSerDe" =>
+        case s if s.toLowerCase.contains("avro") =>
           Avro
-        case "org.apache.hadoop.hive.ql.io.orc.OrcSerde" =>
+        case s if s.toLowerCase.contains("orc") =>
           Orc
+        case "" =>
+          throw new RuntimeException(s"Serde Library not found in table metadata")
         case s =>
-          System.err.println(s"WARN unrecognized SerDe Library: '$s'")
-          Orc
+          throw new RuntimeException(s"unrecognized Serde: '$s'")
       }
     }
   }
