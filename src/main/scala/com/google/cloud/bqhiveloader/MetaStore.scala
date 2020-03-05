@@ -26,6 +26,10 @@ object MetaStore {
                            partitionColumnNames: Seq[String],
                            location: Option[String] = None,
                            raw: Seq[(String,String)] = Seq.empty) {
+
+    override def toString: String =
+      raw.map(t => s"\t'${t._1}'\t->\t'${t._2}'").mkString("\n")
+
     private def get(k: String): String =
       raw.find(_._1.toLowerCase.contains(k.toLowerCase)).map(_._2).getOrElse("")
 
@@ -38,9 +42,9 @@ object MetaStore {
         case s if s.toLowerCase.contains("orc") =>
           Orc
         case "" =>
-          throw new RuntimeException(s"Serde Library not found in table metadata")
+          throw new RuntimeException(s"SerDe not found in table metadata\n$toString")
         case s =>
-          throw new RuntimeException(s"unrecognized Serde: '$s'")
+          throw new RuntimeException(s"Unrecognized SerDe '$s'")
       }
     }
   }
@@ -154,7 +158,7 @@ object MetaStore {
 
     val location = data.find(_._1.startsWith("Location")).map(_._2)
 
-    TableMetadata(schema, partColNames, location)
+    TableMetadata(schema, partColNames, location, data)
   }
 
   case class SparkSQLMetaStore(spark: SparkSession) extends MetaStore {

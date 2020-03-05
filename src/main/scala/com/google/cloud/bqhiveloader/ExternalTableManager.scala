@@ -36,15 +36,6 @@ object ExternalTableManager extends Logging {
   case object Parquet extends StorageFormat
   case object Avro extends StorageFormat
 
-  def parseStorageFormat(s: String): StorageFormat = {
-    s.toLowerCase match {
-      case "orc" => Orc
-      case "parquet" => Parquet
-      case "avro" => Avro
-      case _ => throw new IllegalArgumentException("invalid storage format")
-    }
-  }
-
   def defaultExpiration: Long = System.currentTimeMillis() + 1000*60*60*6 // 6 hours
 
   def getTable(tableId: TableId, bigquery: BigQuery): scala.Option[Table] =

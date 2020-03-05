@@ -16,6 +16,7 @@
 
 package com.google.cloud.bqhiveloader
 
+import com.google.cloud.bqhiveloader.ExternalTableManager.{Avro, Parquet}
 import com.google.cloud.bqhiveloader.MetaStore.TableMetadata
 import org.scalatest.FlatSpec
 
@@ -50,4 +51,59 @@ class MetastoreSpec extends FlatSpec {
     assert(result.format == ExternalTableManager.Orc)
   }
 
+  it should "identify parquet" in {
+    val example = Seq(
+      ("col1","bigint","None"),
+      ("col2","string","None"),
+      ("col3","int","None"),
+      ("col4","string","None"),
+      ("col5","string","None"),
+      ("","",""),
+      ("# Detailed Table Information","",""),
+      ("Database","db",""),
+      ("Table","prod",""),
+      ("Owner","root",""),
+      ("Created","Mon Jul 01 01:00:00 PDT 2019",""),
+      ("Last Access","Wed Dec 31 16:00:00 PST 1969",""),
+      ("Type","EXTERNAL",""),
+      ("Provider","hive",""),
+      ("Table Properties","[numFiles=123, transient_lastDdlTime=1555555555, totalSize=123456789]",""),
+      ("Location","gs://bucket/dir/subdir",""),
+      ("SerDe Library", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe", ""),
+      ("InputFormat", "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat", ""),
+      ("OutputFormat", "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat", ""),
+      ("Storage Properties","[serialization.format=1]",""),
+      ("Partition Provider","Catalog","")
+    )
+    val tbl: TableMetadata = MetaStore.parseTableDetails(example.map(x => (x._1,x._2)))
+    assert(tbl.format == Parquet)
+  }
+
+  it should "identify avro" in {
+    val example = Seq(
+      ("col1","bigint","None"),
+      ("col2","string","None"),
+      ("col3","int","None"),
+      ("col4","string","None"),
+      ("col5","string","None"),
+      ("","",""),
+      ("# Detailed Table Information","",""),
+      ("Database","db",""),
+      ("Table","prod",""),
+      ("Owner","root",""),
+      ("Created","Mon Jul 01 01:00:00 PDT 2019",""),
+      ("Last Access","Wed Dec 31 16:00:00 PST 1969",""),
+      ("Type","EXTERNAL",""),
+      ("Provider","hive",""),
+      ("Table Properties","[numFiles=123, transient_lastDdlTime=1555555555, totalSize=123456789]",""),
+      ("Location","gs://bucket/dir/subdir",""),
+      ("SerDe Library", "org.apache.hadoop.hive.serde2.avro.AvroSerDe", ""),
+      ("InputFormat", "org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat", ""),
+      ("OutputFormat", "org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat", ""),
+      ("Storage Properties","[serialization.format=1]",""),
+      ("Partition Provider","Catalog","")
+    )
+    val tbl: TableMetadata = MetaStore.parseTableDetails(example.map(x => (x._1,x._2)))
+    assert(tbl.format == Avro)
+  }
 }
