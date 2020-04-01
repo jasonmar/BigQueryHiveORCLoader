@@ -14,20 +14,17 @@
  * limitations under the License.
  */
 
-package com.google.cloud.bqhiveloader
+package com.google.cloud.imf.bqhiveloader
 
-import java.util
-import java.util.Map
-
-import com.google.cloud.RetryOption
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
-import com.google.cloud.bigquery.{BigQuery, Clustering, Job, JobId, JobInfo, QueryJobConfiguration, RangePartitioningUtil, StandardTableDefinition, Table, TableId, TableInfo, TableResult, TimePartitioning}
-import com.google.cloud.bqhiveloader.ExternalTableManager.jobid
+import com.google.cloud.bigquery.{BigQuery, Clustering, Job, JobId, JobInfo, QueryJobConfiguration,
+  RangePartitioningUtil, StandardTableDefinition, Table, TableId, TableInfo, TableResult,
+  TimePartitioning}
+import com.google.cloud.imf.bqhiveloader.ExternalTableManager.jobid
 import org.apache.spark.sql.types.{DateType, StructType}
-import org.threeten.bp.Duration
 
-import scala.util.{Failure, Success}
+import scala.util.Success
 
 object NativeTableManager extends Logging {
   def getExistingPartitions(tableId: TableId, bigQuery: BigQuery): TableResult = {
@@ -43,19 +40,29 @@ object NativeTableManager extends Logging {
       .build())
   }
 
-  def createTableIfNotExists(project: String, dataset: String, table: String, c: Config, schema: StructType, bigquery: BigQuery, bql: com.google.api.services.bigquery.Bigquery, expirationMs: scala.Option[Long] = None): Boolean = {
+  def createTableIfNotExists(project: String, dataset: String, table: String, c: Config, schema: StructType, bigquery: BigQuery, expirationMs: scala.Option[Long] = None): Boolean = {
     val tableId = TableId.of(project, dataset, table)
-    createTableIfNotExistsWithId(c, schema, tableId, bigquery, bql, expirationMs)
+    createTableIfNotExistsWithId(c, schema, tableId, bigquery, expirationMs)
   }
 
-  def createTableIfNotExistsWithId(c: Config, schema: StructType, tableId: TableId, bigquery: BigQuery, bql: com.google.api.services.bigquery.Bigquery, expirationMs: scala.Option[Long] = None): Boolean = {
+  private def createTableIfNotExistsWithId(c: Config, schema: StructType, tableId: TableId,
+    bigquery: BigQuery, expirationMs: scala.Option[Long] = None): Boolean = {
     if (!ExternalTableManager.tableExists(tableId, bigquery)) {
-      createTable(c, schema, tableId, bigquery, bql, expirationMs)
+      createTable(c, schema, tableId, bigquery, expirationMs)
       true
     } else false
   }
 
-  def copyOnto(srcProject: String, srcDataset: String, srcTable: String, destProject: String, destDataset: String, destTable: String, destPartition: scala.Option[String] = None, bq: BigQuery, dryRun: Boolean, batch: Boolean): scala.util.Try[Job] = {
+  def copyOnto(srcProject: String,
+               srcDataset: String,
+               srcTable: String,
+               destProject: String,
+               destDataset: String,
+               destTable: String,
+               destPartition: scala.Option[String] = None,
+               bq: BigQuery,
+               dryRun: Boolean,
+               batch: Boolean): scala.util.Try[Job] = {
     val tableWithPartition = destPartition.map(partId => destTable + "$" + partId).getOrElse(destTable)
 
     val srcTableId = TableId.of(srcProject, srcDataset, srcTable)
@@ -63,22 +70,8 @@ object NativeTableManager extends Logging {
 
     val job = selectInto(srcTableId, destTableId, bq, dryRun, batch)
 
-    if (!dryRun){
-      job.map{_.waitFor(
-        RetryOption.initialRetryDelay(Duration.ofSeconds(8)),
-        RetryOption.maxRetryDelay(Duration.ofSeconds(60)),
-        RetryOption.retryDelayMultiplier(2.0d),
-        RetryOption.totalTimeout(Duration.ofMinutes(120)))
-      } match {
-        case Some(j) =>
-          val error = scala.Option(j.getStatus).flatMap(x => scala.Option(x.getError))
-          error
-            .map(e => Failure(new RuntimeException(e.toString)))
-            .getOrElse(Success(j))
-        case _ =>
-          Failure(new RuntimeException("Job doesn't exist"))
-      }
-    } else Success(null)
+    if (dryRun) Success(null) // dry run won't have a job to return
+    else BQ.await(job)
   }
 
   def deletePartition(tbl: TableId, partitionId: String, bq: BigQuery): Boolean = {
@@ -110,7 +103,7 @@ object NativeTableManager extends Logging {
     else scala.Option(ExternalTableManager.createJob(bq, jobId, jobConfig))
   }
 
-  def createTable(c: Config, schema: StructType, destTableId: TableId, bigquery: BigQuery, bql: com.google.api.services.bigquery.Bigquery, expirationMs: scala.Option[Long] = None): Table ={
+  def createTable(c: Config, schema: StructType, destTableId: TableId, bigquery: BigQuery, expirationMs: scala.Option[Long] = None): Table ={
     require(c.clusterColumns.nonEmpty, "destination table does not exist, clusterColumns must not be empty")
     require(c.partitionColumn.nonEmpty, "destination table does not exist, partitionColumn must not be empty")
     val destTableSchema = if (c.partitionColumn.map(_.toLowerCase).contains("none")) {
@@ -167,7 +160,9 @@ object NativeTableManager extends Logging {
 
     if (c.partitionType == "RANGE" && c.partitionColumn.isDefined) {
       val tableInfo = tableInfoBuilder.build()
-      RangePartitioningUtil.createTable(destTableId.getProject, destTableId.getDataset, tableInfo, bql, c.partitionColumn.get, c.partitionRangeStart, c.partitionRangeEnd, c.partitionRangeInterval)
+      RangePartitioningUtil.createTable(destTableId.getProject, destTableId.getDataset,
+        tableInfo, bigquery, c.partitionColumn.get, c.partitionRangeStart, c.partitionRangeEnd, c
+          .partitionRangeInterval)
       bigquery.getTable(tableInfo.getTableId)
     } else {
       bigquery.create(tableInfoBuilder.build())

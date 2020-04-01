@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.cloud.bqhiveloader
+package com.google.cloud.imf.bqhiveloader
 
 import com.google.common.collect.ImmutableMap
 import javax.security.auth.login.{AppConfigurationEntry, Configuration}

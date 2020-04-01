@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.cloud.bqhiveloader
+package com.google.cloud.imf.bqhiveloader
+
+import com.google.cloud.imf.BQHiveLoader
 
 object ConfigParser extends scopt.OptionParser[Config]("BQHiveLoader") {
   private val DefaultConfig = Config()

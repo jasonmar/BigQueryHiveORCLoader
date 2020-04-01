@@ -17,8 +17,9 @@
 package com.google.cloud.bqhiveloader
 
 import com.google.cloud.bigquery.{BigQuery, BigQueryOptions, StandardTableDefinition, TableId, TableInfo}
-import com.google.cloud.bqhiveloader.ExternalTableManager.Orc
-import com.google.cloud.bqhiveloader.MetaStore.Partition
+import com.google.cloud.imf.bqhiveloader.{ExternalTableManager, Mapping, SQLGenerator}
+import com.google.cloud.imf.bqhiveloader.ExternalTableManager.Orc
+import com.google.cloud.imf.bqhiveloader.MetaStore.Partition
 import org.apache.spark.sql.types.DataTypes.{DoubleType, IntegerType, LongType, StringType}
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.scalatest.{BeforeAndAfterAll, FlatSpec}

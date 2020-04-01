@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.cloud.bqhiveloader
+package com.google.cloud.imf.bqhiveloader
 
 case class Config(partitioned: Boolean = true,
                   dryRun: Boolean = false,

@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.cloud.bqhiveloader
+package com.google.cloud.imf.bqhiveloader
 
-import com.google.cloud.bqhiveloader.ExternalTableManager.{Avro, Orc, Parquet, StorageFormat}
-import com.google.cloud.bqhiveloader.PartitionFilters.PartitionFilter
+import com.google.cloud.imf.bqhiveloader.ExternalTableManager.{Avro, Orc, Parquet, StorageFormat}
+import com.google.cloud.imf.bqhiveloader.PartitionFilters.PartitionFilter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SparkSession}
 

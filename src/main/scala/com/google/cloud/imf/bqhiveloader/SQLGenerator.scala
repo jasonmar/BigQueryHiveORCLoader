@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.cloud.bqhiveloader
+package com.google.cloud.imf.bqhiveloader
 
-import com.google.cloud.bigquery.{Table, TableId}
-import com.google.cloud.bqhiveloader.ExternalTableManager.format
-import com.google.cloud.bqhiveloader.MetaStore.Partition
+import com.google.cloud.bigquery.TableId
+import com.google.cloud.imf.bqhiveloader.ExternalTableManager.format
+import com.google.cloud.imf.bqhiveloader.MetaStore.Partition
 import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 
 import scala.collection.mutable.ArrayBuffer

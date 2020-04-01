@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package com.google.cloud.bqhiveloader
+package com.google.cloud.imf.bqhiveloader
 
 import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, Types}
 
-import com.google.cloud.bqhiveloader.MetaStore.{MetaStore, Partition, TableMetadata, mkPartSpec, parsePartitionTable}
-import com.google.cloud.bqhiveloader.PartitionFilters.PartitionFilter
+import com.google.cloud.imf.bqhiveloader.MetaStore.{MetaStore, Partition, TableMetadata, mkPartSpec, parsePartitionTable}
+import com.google.cloud.imf.bqhiveloader.PartitionFilters.PartitionFilter
 import org.apache.spark.sql.types.DataTypes.{BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType}
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}

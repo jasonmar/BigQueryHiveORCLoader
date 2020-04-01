@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.cloud.bqhiveloader
+package com.google.cloud.imf.bqhiveloader
 
-import org.apache.log4j.{Level, LogManager, PatternLayout, ConsoleAppender}
+import org.apache.log4j.{ConsoleAppender, Level, LogManager, PatternLayout}
 
 object Util {
   val DefaultLayout = new PatternLayout("%d{ISO8601} [%t] %-5p %c %x - %m%n")

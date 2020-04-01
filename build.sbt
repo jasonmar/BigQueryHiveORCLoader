@@ -16,18 +16,18 @@
 
 name := "bigquery-hive-external-table-loader"
 
-version := "1.0.0"
+version := "1.1.0-SNAPSHOT"
 
 scalaVersion := "2.11.11"
 
-val sparkVersion = "2.3.0"
+val sparkVersion = "2.3.4"
 
 val exGuava = ExclusionRule("com.google.guava")
 
 libraryDependencies ++= Seq(
-  "com.google.guava" % "guava" % "28.1-jre",
-  "com.google.cloud" % "google-cloud-bigquery" % "1.91.0",
-  "com.google.cloud" % "google-cloud-storage" % "1.91.0",
+  "com.google.guava" % "guava" % "28.2-jre",
+  "com.google.cloud" % "google-cloud-bigquery" % "1.110.0",
+  "com.google.cloud" % "google-cloud-storage" % "1.106.0",
   "log4j" % "log4j" % "1.2.17"
 )
 
@@ -48,8 +48,6 @@ assemblyMergeStrategy in assembly := {
 }
 
 test in assembly := Seq()
-
-assemblyJarName in assembly := "bqhiveloader.jar"
 
 assemblyShadeRules in assembly := Seq(
   ShadeRule.rename("com.google.common.**" -> "s.guava.@1").inAll,

@@ -16,7 +16,8 @@
 
 package com.google.cloud.bqhiveloader
 
-import com.google.cloud.bqhiveloader.PartitionFilters.{PartitionFilter,Equals,GreaterThan,GreaterThanOrEq,LessThan,LessThanOrEq}
+import com.google.cloud.imf.bqhiveloader.PartitionFilters
+import com.google.cloud.imf.bqhiveloader.PartitionFilters.{Equals, GreaterThan, GreaterThanOrEq, LessThan, LessThanOrEq, PartitionFilter}
 import org.scalatest.FlatSpec
 
 class PartitionsFiltersSpec extends FlatSpec {

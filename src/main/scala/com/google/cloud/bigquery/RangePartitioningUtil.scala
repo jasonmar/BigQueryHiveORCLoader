@@ -19,10 +19,10 @@ package com.google.cloud.bigquery
 import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.bigquery.Bigquery
-import com.google.api.services.bigquery.model.{Range, RangePartitioning}
 import com.google.auth.http.HttpCredentialsAdapter
 import com.google.auth.oauth2.GoogleCredentials
-import com.google.cloud.bqhiveloader.{BQHiveLoader, Logging}
+import com.google.cloud.imf.BQHiveLoader
+import com.google.cloud.imf.bqhiveloader.Logging
 
 object RangePartitioningUtil extends Logging {
 
@@ -33,34 +33,37 @@ object RangePartitioningUtil extends Logging {
       .build()
   }
 
-  def addRangePartitioning(rangeField: String,
+  private def addRangePartitioning(rangeField: String,
                            start: Long,
                            end: Long,
                            interval: Long,
-                           table: com.google.api.services.bigquery.model.Table): com.google.api.services.bigquery.model.Table = {
-    val rp = new RangePartitioning(rangeField)
-    rp.setRange(new Range(start, end, interval))
-    table.setRangePartitioning(rp)
-    table
+                           tableInfo: TableInfo): TableInfo = {
+    val defBuilder = tableInfo.getDefinition[StandardTableDefinition].toBuilder
+
+    val rp = new RangePartitioning.Builder()
+      .setField(rangeField)
+      .setRange(RangePartitioning.Range.newBuilder().setStart(start).setEnd(end).build)
+    defBuilder.setRangePartitioning(rp.build)
+
+    tableInfo.toBuilder.setDefinition(defBuilder.build).build
   }
 
   def createTable(projectId: String,
                   datasetId: String,
                   tableInfo: TableInfo,
-                  bigquery: Bigquery,
+                  bigquery: BigQuery,
                   rangeField: String,
                   start: Long,
                   end: Long,
-                  interval: Long): com.google.api.services.bigquery.model.Table = {
-    val table = addRangePartitioning(rangeField, start, end, interval, tableInfo.toPb)
+                  interval: Long): Table = {
+    val tableWithRangePartition =
+      addRangePartitioning(rangeField, start, end, interval, tableInfo)
 
-    val request = bigquery
-      .tables()
-      .insert(projectId, datasetId, table)
-
-    val result = request.execute()
-    result.setFactory(JacksonFactory.getDefaultInstance)
-    logger.info(s"Created table:\n${result.toPrettyString}")
-    result
+    val table = bigquery.create(tableWithRangePartition)
+    val tableSpec = Seq(table.getTableId.getProject,
+                        table.getTableId.getDataset,
+                        table.getTableId.getTable).mkString(",")
+    logger.info(s"Created table `$tableSpec`")
+    table
   }
 }

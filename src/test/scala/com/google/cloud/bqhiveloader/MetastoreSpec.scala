@@ -16,8 +16,9 @@
 
 package com.google.cloud.bqhiveloader
 
-import com.google.cloud.bqhiveloader.ExternalTableManager.{Avro, Parquet}
-import com.google.cloud.bqhiveloader.MetaStore.TableMetadata
+import com.google.cloud.imf.bqhiveloader.{ExternalTableManager, MetaStore}
+import com.google.cloud.imf.bqhiveloader.ExternalTableManager.{Avro, Parquet}
+import com.google.cloud.imf.bqhiveloader.MetaStore.TableMetadata
 import org.scalatest.FlatSpec
 
 class MetastoreSpec extends FlatSpec {

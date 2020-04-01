@@ -14,15 +14,17 @@
  * limitations under the License.
  */
 
-package com.google.cloud.bqhiveloader
+package com.google.cloud.imf.bqhiveloader
 
 import java.util.Calendar
 
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
-import com.google.cloud.bigquery.{BigQuery, BigQueryException, ExternalTableDefinition, FormatOptions, Job, JobConfiguration, JobId, JobInfo, QueryJobConfiguration, Schema, Table, TableId, TableInfo}
-import com.google.cloud.bqhiveloader.Mapping.convertStructType
-import com.google.cloud.bqhiveloader.MetaStore.{Partition, TableMetadata}
+import com.google.cloud.bigquery.{BigQuery, BigQueryException, ExternalTableDefinition,
+  FormatOptions, Job, JobConfiguration, JobId, JobInfo, QueryJobConfiguration, Schema, Table,
+  TableId, TableInfo}
+import com.google.cloud.imf.bqhiveloader.Mapping.convertStructType
+import com.google.cloud.imf.bqhiveloader.MetaStore.{Partition, TableMetadata}
 import com.google.cloud.storage.Storage
 import com.google.common.base.Preconditions
 import com.google.common.io.BaseEncoding
@@ -198,8 +200,14 @@ object ExternalTableManager extends Logging {
         if (e.getMessage.contains("Already Exists")) {
           bq.getJob(jobId)
         } else {
-          logger.error(s"failed to create job: ${e.getMessage}", e)
-          throw e
+          val helpMessage = BQ.getHelpMessage(e.getError)
+          logger.error(s"failed to create job: ${e.getMessage}\n$helpMessage", e)
+          helpMessage match {
+            case Some(helpMsg) =>
+              throw new RuntimeException(helpMsg, e)
+            case None =>
+              throw e
+          }
         }
     }
   }
