@@ -30,10 +30,11 @@ object Util {
   def setLvl(logName: String, level: Level): Unit =
     LogManager.getLogger(logName).setLevel(level)
 
-  def configureLogging(): Unit = {
+  def configureLogging(debug: Boolean): Unit = {
     val rootLogger = LogManager.getRootLogger
     rootLogger.addAppender(new ConsoleAppender(DefaultLayout))
-    rootLogger.setLevel(Level.INFO)
+    val logLevel = if (debug) Level.DEBUG else Level.INFO
+    rootLogger.setLevel(logLevel)
   }
 
   def quietSparkLogs(): Unit = {

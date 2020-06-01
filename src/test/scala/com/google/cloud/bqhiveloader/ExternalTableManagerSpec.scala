@@ -161,4 +161,9 @@ class ExternalTableManagerSpec extends FlatSpec with BeforeAndAfterAll {
     assert(getAsDate("202152", fmt) == "2021-12-24")
     assert(getAsDate("202153", fmt) == "2021-12-31")
   }
+
+  it should "prefix" in {
+    val example = Seq("part-1234","part-1235","part-1236")
+    assert(ExternalTableManager.longestCommonPrefix(example) == "part-123")
+  }
 }

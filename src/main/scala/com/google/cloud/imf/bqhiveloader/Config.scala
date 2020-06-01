@@ -18,6 +18,7 @@ package com.google.cloud.imf.bqhiveloader
 
 case class Config(partitioned: Boolean = true,
                   dryRun: Boolean = false,
+                  debug: Boolean = false,
                   partFilters: String = "",
                   partitionColumn: Option[String] = None,
                   partitionRangeStart: Long = -1,

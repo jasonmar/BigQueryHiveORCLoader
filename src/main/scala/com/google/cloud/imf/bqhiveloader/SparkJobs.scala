@@ -39,11 +39,14 @@ object SparkJobs extends Logging {
 
   def run(config: Config): Unit = {
     val spark = SparkSession
-      .builder()
+      .builder
       .config("spark.yarn.maxAppAttempts","1")
-      .appName("BQHiveORCLoader")
+      .appName("BQHiveLoader")
       .enableHiveSupport
-      .getOrCreate()
+      .getOrCreate
+
+    if (config.debug)
+      spark.sparkContext.setLogLevel("DEBUG")
 
     logger.info(s"launching with MetaStore type '${config.hiveMetastoreType}'")
     val metaStore = {

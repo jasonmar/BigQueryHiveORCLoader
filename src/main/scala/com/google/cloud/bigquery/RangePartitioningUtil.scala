@@ -16,23 +16,9 @@
 
 package com.google.cloud.bigquery
 
-import com.google.api.client.http.javanet.NetHttpTransport
-import com.google.api.client.json.jackson2.JacksonFactory
-import com.google.api.services.bigquery.Bigquery
-import com.google.auth.http.HttpCredentialsAdapter
-import com.google.auth.oauth2.GoogleCredentials
-import com.google.cloud.imf.BQHiveLoader
 import com.google.cloud.imf.bqhiveloader.Logging
 
 object RangePartitioningUtil extends Logging {
-
-  def bq(cred: GoogleCredentials): Bigquery = {
-    new Bigquery.Builder(new NetHttpTransport(), JacksonFactory.getDefaultInstance, new HttpCredentialsAdapter(cred))
-      .setRootUrl("https://www.googleapis.com/")
-      .setApplicationName(BQHiveLoader.UserAgent)
-      .build()
-  }
-
   private def addRangePartitioning(rangeField: String,
                            start: Long,
                            end: Long,

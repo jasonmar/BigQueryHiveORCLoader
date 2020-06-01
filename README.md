@@ -14,7 +14,7 @@ Previous versions of Hive write ORC files with positional column names '_0', '_1
 
 ### Partition Values in Hive MetaStore Only
 
-BigQuery supports reading partition values from file path, but some Hive tables are written with partition values that exist only in the MetaStore. For example, for a partitions registered using `ALTER TABLE table ADD PARTITION (dt='2019-06-03', country='us') LOCATION 'gs://bucket/dt=2019-06-03/data.orc'`, the country is not represented in the file path and would not be loaded by BigQuery. This utility queries the Hive MetaStore to obtain partition information and adds the partition column values to BigQuery by selecting a constant literal value in a SQL query along with the columns found in the ORC file. The unique SQL required for each partition means that each Hive partition with distinct partition values must be loaded in a separate BigQuery Job.  
+BigQuery supports reading partition values from file path, but some Hive tables are written with partition values that exist only in the MetaStore. For example, for a partitions registered using `ALTER TABLE table ADD PARTITION (dt='2019-06-03', country='us') LOCATION 'gs://bucket/dt=2019-06-03/data.orc'`, the country is not represented in the file path and would not be loaded by BigQuery. This utility queries the Hive MetaStore to obtain partition information and adds the partition column values to BigQuery by selecting a constant literal value in a SQL query along with the columns found in the ORC file. The unique SQL required for each partition means that each Hive partition with distinct partition values must be loaded in a separate BigQuery Job.
 
 
 ### A BigQuery Partition may be composed from Multiple Hive Partitions
@@ -24,7 +24,7 @@ BigQuery tables are typically partitioned by date only, while Hive tables may be
 
 ## How it works
 
-1. User specifies source Hive partitions and destination BigQuery partition 
+1. User specifies source Hive partitions and destination BigQuery partition
 2. The utility queries Hive MetaStore to obtain schema and partition locations
 
 (Repeat steps 3-5 for each Hive partition)
@@ -32,7 +32,7 @@ BigQuery tables are typically partitioned by date only, while Hive tables may be
 4. SQL is generated to rename columns and select partition values as constants
 5. A Query Job is submitted to execute the generated SQL, read from the ORC file and write to a BigQuery table
 
-6. For a Partition Refresh, step 4 appends to a temporary table. After all paritions are loaded into the temporary table, a Query Job selects from the temporary table and overwrites the target partition. 
+6. For a Partition Refresh, step 4 appends to a temporary table. After all paritions are loaded into the temporary table, a Query Job selects from the temporary table and overwrites the target partition.
 
 
 
@@ -66,9 +66,9 @@ spark-submit \
     --conf spark.yarn.dist.files=path/to/user.keytab,path/to/jaas.conf \
     --conf "spark.driver.extraJavaOptions=-djava.security.auth.login.config=jaas.conf -Djavax.security.auth.useSubjectCredsOnly=false" \
     --conf "spark.executor.extraJavaOptions=-Djava.security.auth.login.config=jaas.conf -Djavax.security.auth.useSubjectCredsOnly=false" \
-    --jars=bqhiveloader.jar \
     --class com.google.cloud.bqhiveloader.BQHiveLoader \
-    bqhiveloader.jar \
+    bigquery-hive-external-table-loader-assembly-1.1.1-SNAPSHOT.jar \
+    --debug \
     --partitionRefresh ${PART_ID} \
     --partitionColumn ${PART_COL} \
     --clusterCols None \
@@ -78,7 +78,7 @@ spark-submit \
     --bqProject ${PROJECT} \
     --bqDataset ${DEST_DATASET} \
     --bqTable ${DEST_TABLE} \
-    --hiveMetastoreType sql
+    --hiveJdbcUrl 'jdbc:hive2://<host>:<port>,<host>:<port>,<host>:<port>;serviceDiscoveryMode=zookeeper;zooKeeperNamespace=hiveserver2'
 ```
 
 ### Partition Column
@@ -156,8 +156,8 @@ Specified by `--refreshPartition` command-line argument followed by BigQuery par
 Partition Refresh is a mode of operation that overwrites the specified partition ID of the destination BigQuery table. The Query Job that selects from the temporary table sets `project.dataset.table$YYYYMMDD` as the destination table with the Write Disposition set to `TRUNCATE` to indicate that the partition will be overwritten.
 
 If data from outside the specified date is included from the source Hive table, the job will fail.
- 
-Users must verify that the provided partition filters select all Hive partitions intended to be included in the specified BigQuery partition. 
+
+Users must verify that the provided partition filters select all Hive partitions intended to be included in the specified BigQuery partition.
 
 ## Integer Range Partitioning
 
@@ -170,7 +170,7 @@ To create a destination table with Integer Range Partitioning, add the following
 --partitionType=RANGE
 ```
 
-This will create destination tables with the specified range partitioning. 
+This will create destination tables with the specified range partitioning.
 
 Providing range partitioning here saves users the trouble of writing the `bq mk` command because this utility obtains the table definition from Hive metastore.
 
@@ -237,7 +237,7 @@ BigQuery Hive Loader is a command-line utility for loading Hive partitions into 
   --hiveDbName <value>     Hive database name containing partitions to be loaded (required)
   --hiveTableName <value>  Hive table name containing partitions to be loaded (required)
   --hiveMetastoreType <value>
-                           (optional) Hive Metastore type (default: jdbc)
+                           (optional) Hive Metastore type jdbc|sql|external (default: jdbc)
   --hiveStorageFormat <value>
                            (optional) Hive storage format (default: orc)
   --bqProject <value>      BigQuery destination project (required)

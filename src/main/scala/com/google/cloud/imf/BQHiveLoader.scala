@@ -21,15 +21,15 @@ import com.google.cloud.imf.bqhiveloader.{ConfigParser, Kerberos, Logging, Spark
 
 object BQHiveLoader extends Logging {
   val UserAgent = "google-pso-tool/bq-hive-external-table-loader/1.0"
-  def init(): Unit = {
-    Util.configureLogging()
+  def init(debug: Boolean): Unit = {
+    Util.configureLogging(debug)
     Util.quietSparkLogs()
   }
 
   def main(args: Array[String]): Unit = {
     ConfigParser.parse(args) match {
       case Some(config) =>
-        init()
+        init(config.debug)
         for {
           keytab <- config.krbKeyTab
           principal <- config.krbPrincipal

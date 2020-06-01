@@ -20,9 +20,7 @@ import java.util.Calendar
 
 import com.google.cloud.bigquery.JobInfo.{CreateDisposition, WriteDisposition}
 import com.google.cloud.bigquery.QueryJobConfiguration.Priority
-import com.google.cloud.bigquery.{BigQuery, BigQueryException, ExternalTableDefinition,
-  FormatOptions, Job, JobConfiguration, JobId, JobInfo, QueryJobConfiguration, Schema, Table,
-  TableId, TableInfo}
+import com.google.cloud.bigquery.{BigQuery, BigQueryException, ExternalTableDefinition, FormatOptions, Job, JobConfiguration, JobId, JobInfo, QueryJobConfiguration, Schema, Table, TableId, TableInfo}
 import com.google.cloud.imf.bqhiveloader.Mapping.convertStructType
 import com.google.cloud.imf.bqhiveloader.MetaStore.{Partition, TableMetadata}
 import com.google.cloud.storage.Storage
@@ -83,8 +81,19 @@ object ExternalTableManager extends Logging {
     tableInfo
   }
 
-  def resolveLocations(part: Partition, gcs: Storage): Seq[String] ={
+  def resolveLocations(part: Partition, gcs: Storage): Seq[String] =
     listObjects(part.location, gcs)
+
+  def longestCommonPrefix(strings: Seq[String]): String = {
+    val n = strings.minBy(_.length()).length
+    var i = 0
+    val first = strings.headOption.getOrElse("")
+    while (i < n) {
+      if (strings.forall(s => s.charAt(i) == first.charAt(i)))
+        return first.substring(0,i+1)
+      i += 1
+    }
+    first
   }
 
   def listObjects(gsUri: String, gcs: Storage): Seq[String] = {
@@ -98,45 +107,35 @@ object ExternalTableManager extends Logging {
     import scala.collection.JavaConverters.iterableAsScalaIterableConverter
     val blobs = gcs.list(bucket, options:_*)
       .iterateAll().asScala.toArray
-      .filterNot{obj =>
-        val fileName = obj.getName.stripPrefix(prefix)
-        fileName.startsWith(".") || fileName.endsWith("/") || fileName.isEmpty
-      }
 
-    val hasDotFiles = blobs.exists{obj =>
-      obj.getName.stripPrefix(prefix).startsWith(".")
+    val filtered = blobs.map{_.getName.stripPrefix(prefix)}.filterNot{name =>
+      name.startsWith("_") ||
+      name.startsWith(".") ||
+      name.endsWith("/") ||
+      name.isEmpty
     }
 
-    val partPrefix = blobs.forall{obj =>
-      obj.getName.stripPrefix(prefix).startsWith("part")
+    // filter out .SUCCESS and _SUCCESS which will cause reads to fail
+    val hasEmptyFiles = blobs.exists{obj =>
+      val name = obj.getName.stripPrefix(prefix)
+      name.startsWith(".") || name.startsWith("_")
     }
 
-    val numPrefix = blobs.forall{obj =>
-      obj.getName.stripPrefix(prefix).startsWith("0")
-    }
+    val commonPrefix = longestCommonPrefix(filtered)
 
-    if (!hasDotFiles) {
-      if (path == "")
-        Seq(s"gs://$bucket/*")
-      else
-        Seq(s"gs://$bucket/$path/*")
-    } else if (partPrefix) {
-      if (path == "")
-        Seq(s"gs://$bucket/part*")
-      else Seq(s"gs://$bucket/$path/part*")
-    } else if (numPrefix) {
-      if (path == "") Seq(s"gs://$bucket/0*")
-      else Seq(s"gs://$bucket/$path/0*")
+    if (commonPrefix.nonEmpty) {
+      if (path.nonEmpty) Seq(s"gs://$bucket/$path/$commonPrefix*")
+      else Seq(s"gs://$bucket/$commonPrefix*")
+    } else if (!hasEmptyFiles) {
+      if (path.nonEmpty) Seq(s"gs://$bucket/$path/*")
+      else Seq(s"gs://$bucket/*")
     } else {
-      val locations = blobs.filterNot{obj =>
-        val fileName = obj.getName.stripPrefix(prefix)
-        fileName.startsWith(".") || fileName.endsWith("/") || fileName.isEmpty
+      require(filtered.length <= 500, "partition has more than 500 objects - " +
+        "remove files beginning with '.' to enable * wildcard matching")
+      filtered.map{name =>
+        if (path.nonEmpty) s"gs://$bucket/$path/$name"
+        else s"gs://$bucket/$name"
       }
-        .map{obj => s"gs://$bucket/${obj.getName}"}
-
-      require(locations.length <= 500, "partition has more than 500 objects - remove files beginning with '.' to enable * wildcard matching")
-
-    locations
     }
   }
 

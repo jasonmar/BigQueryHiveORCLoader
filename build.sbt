@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Google LLC
+ * Copyright 2020 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 name := "bigquery-hive-external-table-loader"
 
-version := "1.1.0-SNAPSHOT"
+version := "1.1.1-SNAPSHOT"
 
 scalaVersion := "2.11.11"
 
@@ -25,9 +25,9 @@ val sparkVersion = "2.3.4"
 val exGuava = ExclusionRule("com.google.guava")
 
 libraryDependencies ++= Seq(
-  "com.google.guava" % "guava" % "28.2-jre",
-  "com.google.cloud" % "google-cloud-bigquery" % "1.110.0",
-  "com.google.cloud" % "google-cloud-storage" % "1.106.0",
+  "com.google.guava" % "guava" % "29.0-jre",
+  "com.google.cloud" % "google-cloud-bigquery" % "1.116.0",
+  "com.google.cloud" % "google-cloud-storage" % "1.108.0",
   "log4j" % "log4j" % "1.2.17"
 )
 
